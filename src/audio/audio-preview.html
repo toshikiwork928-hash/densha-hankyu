@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>走行音比較</title>
+<style>body{max-width:760px;margin:32px auto;padding:0 20px;font:16px/1.7 sans-serif;background:#152332;color:#eef4f8}button{padding:12px 20px;font:inherit}audio{display:block;width:100%;margin:12px 0}pre{white-space:pre-wrap}section{padding:16px;border:1px solid #648096;margin:20px 0}</style>
+<h1>走行音比較</h1><p>独自合成。停止中P → 0〜90km/h力行 → 惰行 → 回生 → 消音。24秒。実車録音ではない。</p>
+<button id="render">比較音を作る</button><button id="custom">指定JSONの音を作る</button><div id="result"></div>
+<script type="module">
+import { createCore } from './engine.ts';
+import { createVvvf } from './vvvf.ts';
+import { createResistance } from './resistance.ts';
+const button = document.querySelector('#render'), result = document.querySelector('#result');
+function wav(buffer) {
+  const d = buffer.getChannelData(0), ab = new ArrayBuffer(44 + d.length * 2), view = new DataView(ab);
+  const text = (o, s) => [...s].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  text(0,'RIFF'); view.setUint32(4,36+d.length*2,true); text(8,'WAVE'); text(12,'fmt ');
+  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+  view.setUint32(24,buffer.sampleRate,true); view.setUint32(28,buffer.sampleRate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true);
+  text(36,'data'); view.setUint32(40,d.length*2,true);
+  d.forEach((v,i) => view.setInt16(44+i*2,Math.round(Math.max(-1,Math.min(1,v))*32767),true));
+  let binary='';
+  for (const byte of new Uint8Array(ab)) binary+=String.fromCharCode(byte);
+  return 'data:audio/wav;base64,'+btoa(binary);
+}
+function rms(d, sr, start, end) { let sum=0; const a=Math.floor(start*sr), b=Math.floor(end*sr); for(let i=a;i<b;i++)sum+=d[i]*d[i]; return Math.sqrt(sum/(b-a)); }
+async function render(sound) {
+  const sr=22050, duration=24, ac=new OfflineAudioContext(2,sr*duration,sr);
+  const output=ac.createGain(), merger=ac.createChannelMerger(2); merger.connect(ac.destination);
+  output.connect(merger,0,0);
+  const hp=ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1000; hp.Q.value=.707;
+  const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=4500; lp.Q.value=.707;
+  output.connect(hp).connect(lp).connect(merger,0,1);
+  const core=createCore(ac,output); core.master.gain.value=.8;
+  const engine=sound==='resistance'
+    ? createResistance(core)
+    : createVvvf(core,core.run,()=>sound);
+  const points=Array.from({length:duration*40},(_,i)=>({t:i/40, promise:ac.suspend(i/40)}));
+  const done=ac.startRendering();
+  for(const point of points) {
+    await point.promise; const t=point.t;
+    if(t<2)engine.update(0,5);
+    else if(t<14)engine.update((t-2)*7.5/3.6,5);
+    else if(t<16)engine.update(90/3.6,0);
+    else if(t<22)engine.update(Math.max(0,90-(t-16)*15)/3.6,-5);
+    else engine.silence();
+    await ac.resume();
+  }
+  const buffer=await done, full=buffer.getChannelData(0), high=buffer.getChannelData(1);
+  const section=document.createElement('section');
+  const heading=document.createElement('h2');heading.textContent=sound==='resistance'?'抵抗制御':sound==='soft'?'改良':'従来';
+  const audio=document.createElement('audio');audio.controls=true;audio.src=wav(buffer);
+  const metrics=document.createElement('pre');
+  let peak=0, finite=true;for(const v of full){peak=Math.max(peak,Math.abs(v));if(!Number.isFinite(v))finite=false;}
+  metrics.textContent=JSON.stringify({finite,peak:+peak.toFixed(6),stoppedP_rms:+rms(full,sr,.3,1.8).toFixed(6),start_rms:+rms(full,sr,2.2,4.5).toFixed(6),start_1k_4_5k_rms:+rms(high,sr,2.2,4.5).toFixed(6),power_rms:+rms(full,sr,4,13).toFixed(6),power_1k_4_5k_rms:+rms(high,sr,4,13).toFixed(6),coast_rms:+rms(full,sr,14.5,15.8).toFixed(6),regen_rms:+rms(full,sr,16.4,21).toFixed(6),silence_rms:+rms(full,sr,23.5,24).toFixed(8)},null,2);
+  section.append(heading,audio,metrics);result.append(section);
+}
+const customConfig = {
+  system_info: { engine_type:'VVVF_Motor_Synthesizer', version:'2.0', max_rpm:12000, max_speed_kmh:120 },
+  overall_levels: { peak_gain:.85, master_volume:.70, stopped_rms:.012, silence_threshold:.0001 },
+  motor_synthesis: {
+    pole_pairs:4, gear_ratio:9.73,
+    harmonics:[{harmonic_order:1,gain_db:0,type:'sine'},{harmonic_order:2,gain_db:-6,type:'triangle'},{harmonic_order:4,gain_db:-12,type:'sine'},{harmonic_order:6,gain_db:-18,type:'sawtooth'}],
+    torque_modulation:{power_gain_mult:1.45,regen_gain_mult:1.15,coast_gain_mult:.35,saturation_drive:1.2}
+  },
+  vvvf_inverter: { waveform:'square_pwm',resonance_q:4.5,mode_transitions:[
+    {min_kmh:0,max_kmh:12,mode:'asynchronous_pwm',carrier_freq_hz:[1050,1050],carrier_volume:.40},
+    {min_kmh:12,max_kmh:28,mode:'asynchronous_sweep',carrier_freq_hz:[1050,1800],carrier_volume:.35},
+    {min_kmh:28,max_kmh:45,mode:'synchronous_9pulse',pulse_ratio:9,carrier_volume:.28},
+    {min_kmh:45,max_kmh:70,mode:'synchronous_3pulse',pulse_ratio:3,carrier_volume:.20},
+    {min_kmh:70,max_kmh:120,mode:'single_pulse',pulse_ratio:1,carrier_volume:.12}
+  ] },
+  acoustic_filters: {
+    avas_presence_boost_1k_4k:{center_freq_hz:2750,bandwidth_q:1.4,power_gain_db:8,coast_gain_db:-3},
+    body_resonance_lowpass:{cutoff_hz:4800,rolloff_db_oct:12}
+  }
+};
+async function renderCustom() {
+  const control=document.querySelector('#custom'); control.disabled=true; control.textContent='作成中…';
+  try {
+    const c=customConfig, sr=48000, duration=24, ac=new OfflineAudioContext(1,sr*duration,sr);
+    const motorBuffer=ac.createBuffer(1,sr*duration,sr), pwmBuffer=ac.createBuffer(1,sr*duration,sr);
+    const motor=motorBuffer.getChannelData(0), pwm=pwmBuffer.getChannelData(0);
+    const torque=c.motor_synthesis.torque_modulation;
+    let phase=0, carrierPhase=0, carrierHz=1050, carrierGain=.4;
+    const smooth=1-Math.exp(-1/(sr*.012));
+    for(let i=0;i<motor.length;i++) {
+      const t=i/sr;
+      if(t>=22)continue;
+      if(t<2) { pwm[i]=Math.SQRT2*c.overall_levels.stopped_rms*Math.sin(2*Math.PI*1050*t); continue; }
+      const speed=t<14?(t-2)*10:t<16?120:Math.max(0,120-(t-16)*20);
+      const rpm=c.system_info.max_rpm*speed/c.system_info.max_speed_kmh;
+      const electricalHz=rpm/60*c.motor_synthesis.pole_pairs;
+      const mode=c.vvvf_inverter.mode_transitions.find(m=>speed>=m.min_kmh && speed<m.max_kmh)??c.vvvf_inverter.mode_transitions.at(-1);
+      const targetHz=mode.pulse_ratio?electricalHz*mode.pulse_ratio:mode.carrier_freq_hz[0]+(mode.carrier_freq_hz[1]-mode.carrier_freq_hz[0])*(speed-mode.min_kmh)/(mode.max_kmh-mode.min_kmh);
+      carrierHz+=(targetHz-carrierHz)*smooth; carrierGain+=(mode.carrier_volume-carrierGain)*smooth;
+      phase=(phase+electricalHz/sr)%1; carrierPhase=(carrierPhase+carrierHz/sr)%1;
+      let value=0;
+      for(const h of c.motor_synthesis.harmonics) {
+        const p=(phase*h.harmonic_order)%1;
+        const wave=h.type==='triangle'?2/Math.PI*Math.asin(Math.sin(2*Math.PI*p)):h.type==='sawtooth'?2*p-1:Math.sin(2*Math.PI*p);
+        value+=wave*10**(h.gain_db/20);
+      }
+      const gain=t<14?torque.power_gain_mult:t<16?torque.coast_gain_mult:torque.regen_gain_mult;
+      // Keep the zero-speed boundary and final fade continuous.
+      const fade=Math.min(1,(t-2)/.06,Math.max(0,(22-t)/.06));
+      motor[i]=Math.tanh(value*torque.saturation_drive)*gain*fade;
+      const triangle=1-4*Math.abs(carrierPhase-.5), modulation=.95*speed/120;
+      const pulse=mode.pulse_ratio===1?Math.sign(Math.sin(2*Math.PI*phase)):(modulation*Math.sin(2*Math.PI*phase)>=triangle?1:-1);
+      pwm[i]=pulse*carrierGain*gain*fade;
+    }
+    const motorSource=ac.createBufferSource(), pwmSource=ac.createBufferSource();
+    motorSource.buffer=motorBuffer; pwmSource.buffer=pwmBuffer;
+    const resonance=ac.createBiquadFilter(); resonance.type='bandpass'; resonance.Q.value=c.vvvf_inverter.resonance_q;
+    // Resonance follows the same carrier schedule; Q describes a bandpass peak.
+    for(let t=0;t<=22;t+=.025) {
+      const speed=t<2?0:t<14?(t-2)*10:t<16?120:Math.max(0,120-(t-16)*20);
+      const m=c.vvvf_inverter.mode_transitions.find(m=>speed>=m.min_kmh && speed<m.max_kmh)??c.vvvf_inverter.mode_transitions.at(-1);
+      const hz=m.pulse_ratio?speed/c.system_info.max_speed_kmh*c.system_info.max_rpm/60*c.motor_synthesis.pole_pairs*m.pulse_ratio:m.carrier_freq_hz[0]+(m.carrier_freq_hz[1]-m.carrier_freq_hz[0])*(speed-m.min_kmh)/(m.max_kmh-m.min_kmh);
+      resonance.frequency.linearRampToValueAtTime(Math.max(20,hz),t);
+    }
+    const presence=ac.createBiquadFilter(), lowpass=ac.createBiquadFilter();
+    const f=c.acoustic_filters.avas_presence_boost_1k_4k;
+    presence.type='peaking'; presence.frequency.value=f.center_freq_hz; presence.Q.value=f.bandwidth_q;
+    presence.gain.setValueAtTime(f.power_gain_db,0);
+    presence.gain.setValueAtTime(f.power_gain_db,13.98); presence.gain.linearRampToValueAtTime(f.coast_gain_db,14.02);
+    presence.gain.setValueAtTime(f.coast_gain_db,15.98); presence.gain.linearRampToValueAtTime(f.power_gain_db,16.02);
+    lowpass.type='lowpass'; lowpass.frequency.value=c.acoustic_filters.body_resonance_lowpass.cutoff_hz; lowpass.Q.value=Math.SQRT1_2;
+    motorSource.connect(presence); pwmSource.connect(resonance).connect(presence); presence.connect(lowpass).connect(ac.destination);
+    motorSource.start(); pwmSource.start();
+    const buffer=await ac.startRendering(), samples=buffer.getChannelData(0);
+    let peak=0; for(const v of samples) { if(!Number.isFinite(v))throw new Error('音声に非有限値があります'); peak=Math.max(peak,Math.abs(v)); }
+    const scale=peak>0?c.overall_levels.peak_gain*c.overall_levels.master_volume/peak:0;
+    for(let i=0;i<samples.length;i++)samples[i]*=scale;
+    // stopped_rms is the audible output level; preserve it after peak normalization.
+    const stopped=rms(samples,sr,.3,1.8), stoppedScale=stopped>0?c.overall_levels.stopped_rms/stopped:0;
+    for(let i=0;i<sr*2;i++)samples[i]*=stoppedScale*Math.min(1,i/(sr*.03),(sr*2-i)/(sr*.03));
+    // Suppress the filter tail once its RMS is below the supplied silence threshold.
+    for(let i=sr*22;i<samples.length;i+=480) {
+      const end=Math.min(i+480,samples.length); let sum=0;
+      for(let j=i;j<end;j++)sum+=samples[j]*samples[j];
+      if(Math.sqrt(sum/(end-i))<c.overall_levels.silence_threshold)samples.fill(0,i,end);
+    }
+    const section=document.createElement('section'); section.id='custom-result';
+    const heading=document.createElement('h2'); heading.textContent='指定JSON VVVF';
+    const note=document.createElement('p'); note.textContent='停止 → 0〜120km/h力行 → 惰行 → 回生 → 消音。24秒。PWM音響近似。回転数は速度比例、変調率は最大0.95。歯車比9.73は保存のみ（車輪径の指定なし）。';
+    const audio=document.createElement('audio'); audio.controls=true; audio.src=wav(buffer);
+    const metrics=document.createElement('pre');
+    let finalPeak=0;for(const v of samples)finalPeak=Math.max(finalPeak,Math.abs(v));
+    metrics.textContent=JSON.stringify({finite:true,peak:+finalPeak.toFixed(6),stopped_rms:+rms(samples,sr,.3,1.8).toFixed(6),silence_rms:+rms(samples,sr,23.5,24).toFixed(8)},null,2);
+    section.append(heading,note,audio,metrics); document.querySelector('#custom-result')?.remove(); result.append(section);
+    control.textContent='指定JSONの音を再作成';
+  } catch(e) { control.textContent='再試行'; const message=document.createElement('p');message.textContent=String(e);result.append(message); }
+  finally { control.disabled=false; }
+}
+document.querySelector('#custom').addEventListener('click',renderCustom);
+button.addEventListener('click',async()=>{button.disabled=true;result.replaceChildren();button.textContent='作成中…';try{await render('soft');await render('legacy');await render('resistance');button.textContent='作成完了';}catch(e){result.textContent=String(e);button.textContent='再試行';button.disabled=false;}});
+</script></html>

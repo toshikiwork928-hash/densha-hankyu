@@ -1,0 +1,353 @@
+:root { --panel: rgba(14,18,26,.78); --line: rgba(255,255,255,.14); --fg: #eef2f7; --muted: #9aa6b6; --pow: #4aa8ff; --brk: #ffa53a; --eb: #ff4646; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; color: var(--fg);
+  font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#cabframe { position: fixed; inset: 0; pointer-events: none;
+  box-shadow: inset 0 0 0 10px #15181d, inset 0 0 80px rgba(0,0,0,.55);
+  background: linear-gradient(#15181d 0 3.5%, transparent 3.5%); }
+#hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 22px 16px 14px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; backdrop-filter: blur(4px); }
+.lbl { font-size: 11px; color: var(--muted); letter-spacing: .08em; }
+.sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+#topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+#clock { font: 700 26px/1.1 ui-monospace, "Consolas", monospace; }
+#delay.late { color: #ff8a7a; } #delay.early { color: #8fd3ff; }
+#banner { flex: 1; text-align: center; font-size: clamp(16px, 3vw, 26px); font-weight: 700; text-shadow: 0 2px 8px #000, 0 0 2px #000; opacity: 0; transition: opacity .3s; padding-top: 6px; }
+#banner.show { opacity: 1; }
+#limitPanel { text-align: center; min-width: 96px; }
+.limitSign { margin: 4px auto 0; width: 54px; height: 54px; border-radius: 50%; background: #fff; color: #111; border: 5px solid #e8502a;
+  display: grid; place-items: center; font: 800 22px/1 system-ui, sans-serif; }
+#limitPanel.over .limitSign { animation: blink .4s steps(2) infinite; }
+@keyframes blink { 50% { background: #ff4646; color: #fff; } }
+#dash { display: flex; justify-content: center; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+#distPanel { min-width: 170px; }
+#dist { font: 700 30px/1.1 ui-monospace, "Consolas", monospace; }
+#dist.near { color: #ffe066; }
+#meter { width: 230px; height: 230px; }
+#notches { display: flex; flex-direction: column; gap: 2px; font: 700 12px/1 ui-monospace, "Consolas", monospace; }
+#notches div { padding: 2px 10px; border-radius: 4px; color: #56606e; text-align: center; }
+#notches div.on.p { background: var(--pow); color: #fff; }
+#notches div.on.n { background: #e8edf3; color: #111; }
+#notches div.on.b { background: var(--brk); color: #111; }
+#notches div.on.e { background: var(--eb); color: #fff; }
+#touch { position: fixed; right: 16px; bottom: 16px; display: none; flex-direction: column; gap: 8px; pointer-events: auto; }
+#touch button { width: 76px; height: 64px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font-size: 22px; font-weight: 700; touch-action: manipulation; }
+#touch button small { display: block; font-size: 10px; color: var(--muted); }
+#touch button[data-k="eb"] { background: #7a1616; height: 44px; font-size: 16px; }
+/* タッチ端末とスマホ幅のプレビューでは操作ボタンを表示する。 */
+@media (any-pointer: coarse), (max-width: 640px), (max-width: 1024px) and (max-height: 500px) { #touch { display: flex; } #dash { justify-content: flex-start; } }
+@media (max-width: 640px) {
+  #meter { width: 160px; height: 160px; }
+  #dist { font-size: 22px; } #clock { font-size: 20px; } #distPanel { min-width: 130px; }
+  #notches div { padding: 1px 6px; font-size: 10px; }
+  #dash { gap: 6px; padding-right: 88px; }
+}
+#overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5,8,12,.62); padding: 16px; }
+#overlay.hidden { display: none; }
+.card { width: min(520px, 100%); background: #121823; border: 1px solid var(--line); border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); max-height: 100%; overflow: auto; }
+.card h1 { margin: 0 0 4px; font-size: 26px; }
+.card h1 small { display: block; font-size: 13px; color: var(--muted); font-weight: 400; margin-top: 4px; }
+.card p, .card li { color: #c9d2de; font-size: 14px; line-height: 1.7; }
+.card ul { padding-left: 18px; margin: 8px 0; }
+kbd { background: #222b39; border: 1px solid #3a4558; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; font-family: ui-monospace, monospace; font-size: 12px; }
+.btn { display: block; width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 10px; background: #2f7cf6; color: #fff; font-size: 17px; font-weight: 700; cursor: pointer; }
+.btn:hover { background: #4a8ff8; }
+.btn:disabled { background: #34404f; color: #9aa6b6; cursor: wait; }
+.route { display: flex; align-items: center; gap: 10px; margin: 14px 0; font-weight: 700; }
+.route .bar { flex: 1; height: 4px; background: linear-gradient(90deg, #4aa8ff, #ffa53a); border-radius: 2px; }
+.rank { font: 900 72px/1 system-ui, sans-serif; text-align: center; margin: 6px 0; }
+.rank.S { color: #ffd84a; } .rank.A { color: #6fe08a; } .rank.B { color: #6fc0ff; } .rank.C { color: #c9d2de; } .rank.D, .rank.F { color: #ff7a6a; }
+table.res { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.res td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+table.res td:last-child { text-align: right; font-family: ui-monospace, monospace; }
+.total { text-align: center; font-size: 20px; font-weight: 700; margin-top: 10px; }
+.pitari { text-align: center; color: #ffd84a; font-weight: 800; font-size: 20px; }
+
+/* ---- [A] 信号・ATS・戸閉・時刻表・ステージ選択・結果表 ---- */
+#sidePanel { position: absolute; left: 16px; top: 112px; display: flex; flex-direction: column; gap: 6px; width: 210px; font-size: 12px; }
+#sidePanel .panel { padding: 6px 10px; }
+.sp-svc { font-size: 13px; }
+.svcBadge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-weight: 800; color: #fff; background: #4a5566; }
+.svcBadge.svc-local { background: #15171b; border: 1px solid #8a93a0; }
+.svcBadge.svc-express, .svcBadge.svc-airport { background: #e2501c; }
+.svcBadge.svc-limited, .svcBadge.svc-southern { background: #d01e2e; }
+#selService button.on.svc-local { background: #15171b; border-color: #c9d2de; }
+#selService button.on.svc-express, #selService button.on.svc-airport { background: #e2501c; border-color: #e2501c; }
+#selService button.on.svc-limited, #selService button.on.svc-southern { background: #d01e2e; border-color: #d01e2e; }
+.sigRow { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.sigLamps { display: grid; grid-template-columns: 12px; gap: 3px; background: #111; padding: 4px; border-radius: 6px; border: 1px solid #333; }
+.sigLamps i { width: 12px; height: 12px; border-radius: 50%; background: #2a2d33; display: block; }
+.sigLamps[data-a="G"] .l-g, .sigLamps[data-a="YG"] .l-g { background: #3dff8a; box-shadow: 0 0 8px #3dff8a; }
+.sigLamps[data-a="Y"] .l-y1, .sigLamps[data-a="YG"] .l-y2 { background: #ffc53d; box-shadow: 0 0 8px #ffc53d; }
+.sigLamps[data-a="R"] .l-r { background: #ff4646; box-shadow: 0 0 8px #ff4646; }
+#sigTxt { font: 700 16px/1.2 ui-monospace, Consolas, monospace; }
+#sigTxt.asp-G { color: #6fe08a; } #sigTxt.asp-YG { color: #d9f06a; } #sigTxt.asp-Y { color: #ffc53d; } #sigTxt.asp-R { color: #ff6a5a; }
+#atsLine { margin-top: 4px; font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; }
+#atsLine.ats-ok { color: #8fd3ff; }
+#atsLine.ats-warn { background: #ffc53d; color: #111; animation: blink .5s steps(2) infinite; }
+#atsLine.ats-brake { background: #ff4646; color: #fff; }
+.doorLamp { display: inline-block; padding: 1px 8px; border-radius: 4px; background: #2a2d33; color: #777; font-weight: 700; }
+.doorLamp.on { background: #ffb02e; color: #111; box-shadow: 0 0 8px rgba(255,176,46,.6); }
+#ttTable { width: 100%; border-collapse: collapse; margin-top: 2px; font-family: ui-monospace, Consolas, monospace; }
+#ttTable td { padding: 1px 2px; color: #9aa6b6; white-space: nowrap; }
+#ttTable td:first-child { font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; }
+#ttTable td small { font-size: 9px; }
+#ttTable tr.next td { color: #fff; font-weight: 700; }
+#ttTable tr.done td { color: #56606e; }
+#ttTable tr.pass td:first-child::after { content: '(通過)'; font-size: 9px; margin-left: 2px; }
+#replayTag { display: none; position: fixed; left: 50%; top: 64px; transform: translateX(-50%); font: 800 18px/1 system-ui, sans-serif; letter-spacing: .3em;
+  color: #fff; background: rgba(200,30,30,.8); padding: 6px 14px; border-radius: 6px; }
+#replayTag.show { display: block; }
+#replayBar { display: none; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); gap: 10px; z-index: 1000; pointer-events: auto; }
+#replayBar.show { display: flex; }
+#replayBar button { padding: 10px 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: rgba(20,28,40,.85); color: #fff; font: 700 15px/1 system-ui, sans-serif; cursor: pointer; }
+#replayBar button:hover { background: rgba(40,56,80,.95); }
+body.cam-outside #cabframe { display: none; }
+body.cam-replay #dash, body.cam-replay #sidePanel .panel, body.cam-replay #touch { display: none; }
+#touch button[data-k="ats"] { background: #6b5410; height: 48px; font-size: 16px; }
+#touch button[data-k="cam"] { height: 36px; font-size: 13px; }
+.sel { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.sel button { flex: 1 1 auto; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: #1b2330; color: #c9d2de; font-size: 13px; cursor: pointer; }
+.sel button.on { background: #2f7cf6; color: #fff; border-color: #2f7cf6; }
+.sel button small { display: block; font-size: 10px; color: #9aa6b6; }
+.sel.col { flex-direction: column; }
+.sel button:disabled { cursor: default; opacity: .85; }
+
+/* 同じ3Dモデルから顔アイコンと外観展示を描画 */
+#selKind .vehicle-choice { display: flex; align-items: center; gap: 12px; text-align: left; }
+.vehicle-face { flex: 0 0 64px; object-fit: contain; background: #e2e9ef; border-radius: 10px; }
+.vehicle-choice small { margin-top: 4px; line-height: 1.5; }
+.vehicle-preview { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #141e2b; }
+.preview-heading { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.preview-heading span { color: var(--muted); font-weight: 400; }
+.preview-stage { height: 240px; background: radial-gradient(ellipse at 50% 40%, #dce5ed, #a0b1c1); border-radius: 8px; overflow: hidden; }
+.vehicle-preview-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.vehicle-preview-canvas:active { cursor: grabbing; }
+.vehicle-preview-canvas:focus-visible { outline: 3px solid #2f7cf6; outline-offset: -3px; }
+.preview-controls { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.preview-controls button { border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; background: #26364a; color: var(--fg); cursor: pointer; }
+.preview-controls button:hover { background: #354d6b; }
+.preview-controls button:focus-visible { outline: 2px solid #8fd3ff; }
+.camera-view-label { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 20; border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; background: var(--panel); color: #dbe8ff; font-size: 12px; pointer-events: none; }
+@media (max-width: 640px), (max-height: 640px) {
+  .preview-stage { height: 190px; }
+  .vehicle-face { width: 52px; height: 52px; flex-basis: 52px; }
+}
+table.res.rec { font-size: 12px; margin-bottom: 8px; }
+table.res.rec td { padding: 4px; }
+#resetRec { margin-top: 6px; padding: 8px; font-size: 13px; }
+.sel button.on small { color: #dbe8ff; }
+.selLbl { font-size: 11px; color: var(--muted); margin-top: 8px; letter-spacing: .08em; }
+.best { font-size: 12px; color: #ffd84a; text-align: center; margin-top: 6px; }
+#titleExtra:empty { display: none; }
+#titleExtra { margin-top: 8px; }
+table.res.st td { font-size: 12px; padding: 4px; }
+table.res.st td:last-child { text-align: right; }
+.btnRow { display: flex; gap: 8px; }
+.btnRow .btn { flex: 1; }
+.btn.sub2 { background: #34404f; }
+@media (max-width: 640px) {
+  #sidePanel { top: 118px; left: 8px; width: 150px; font-size: 10px; }
+  #sidePanel .panel { padding: 4px 8px; }
+  #sidePanel .sp-tt { display: none; }
+  #sigTxt { font-size: 13px; }
+}
+
+/* ---- タイトルのタブ ---- */
+.tabs { display: flex; gap: 4px; margin: 10px 0 8px; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; appearance: none; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 700; padding: 8px 4px; cursor: pointer; }
+.tabs button.on { color: #fff; border-bottom-color: #2f7cf6; }
+.tabs button:hover:not(.on) { color: #c9d2de; }
+.tabPane { min-height: 236px; }
+.tabPane[hidden] { display: none; }
+.tabPane .env-panel { margin-top: 4px; }
+.tabPane p.brief { margin: 8px 0 4px; font-size: 13px; line-height: 1.6; }
+.env-panel-like { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.03); display: grid; gap: 10px; margin-top: 4px; font-size: 13px; color: #c9d2de; }
+.env-panel-like input[type=range] { flex: 1; min-width: 90px; accent-color: #2f7cf6; }
+.env-panel-like input[type=checkbox] { width: 18px; height: 18px; accent-color: #2f7cf6; }
+table.keys { width: 100%; border-collapse: collapse; font-size: 13px; color: #c9d2de; }
+table.keys td { padding: 5px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px; }
+.card p.credit { margin: 10px 0 0; font-size: 11px; text-align: center; }
+.card .btn#go { margin-top: 12px; }
+@media (max-width: 640px), (max-height: 640px) {
+  .card { padding: 16px; }
+  .card h1 { font-size: 21px; }
+  .route { margin: 8px 0; }
+  .tabPane { min-height: 0; }
+  .sel button { padding: 5px 8px; font-size: 12px; }
+}
+
+/* ---- 計器の配置: 3D 運転台の計器（画面下中央やや左）と重ならないよう HTML 計器は右下へ寄せる ---- */
+#dash { display: grid; grid-template-columns: auto auto; grid-template-areas: "dist dist" "meter notch"; justify-content: end; align-items: end; gap: 6px 8px; }
+#distPanel { grid-area: dist; justify-self: end; }
+#meter { grid-area: meter; width: 190px; height: 190px; }
+#dash > .panel:last-child { grid-area: notch; }
+@media (any-pointer: coarse), (max-width: 640px) { #dash { justify-content: start; } #distPanel { justify-self: start; } }
+@media (max-width: 640px) {
+  #meter { width: 160px; height: 160px; }
+  #dash { padding-right: 0; }
+}
+@media (max-width: 640px) { #dash { padding-right: 88px; } }
+@media (max-width: 640px), (max-height: 500px) {
+  /* 狭い画面（縦持ち・横持ちのスマホ）ではバナーを上部パネルの間に挟まず、視界中央寄りに全幅で出す。
+     左の情報パネル・計器より前面に出して全文を読めるようにする */
+  #banner { position: fixed; left: 8px; right: 8px; top: 40%; padding: 6px 10px; font-size: 18px; z-index: 30; pointer-events: none; background: rgba(10, 14, 20, .68); border-radius: 8px; }
+  #banner:empty { display: none; }
+}
+@media (max-height: 500px) { #banner { top: 26%; font-size: 16px; } }
+/* 横向きスマホ（高さが低い画面）: 左の情報パネルを詰め、計器はタッチボタンの左に右寄せ */
+@media (max-height: 500px) {
+  #hud { padding: 10px 10px 8px; }
+  #clock { font-size: 18px; }
+  #sidePanel { top: 74px; width: 180px; gap: 4px; font-size: 11px; }
+  #sidePanel .panel { padding: 4px 8px; }
+  #sidePanel .sp-tt { display: none; }
+  #dash { justify-content: end; grid-template-areas: "dist dist" "meter notch"; }
+  #distPanel { justify-self: end; min-width: 0; }
+  #dist { font-size: 20px; }
+  #meter { width: 140px; height: 140px; }
+  #notches { gap: 0; }
+  #notches div { padding: 0 6px; font-size: 9px; line-height: 1.15; }
+  .limitSign { width: 42px; height: 42px; font-size: 17px; border-width: 4px; }
+}
+@media (max-height: 500px) and (any-pointer: coarse), (max-height: 500px) and (max-width: 1024px) {
+  #dash { padding-right: 92px; }
+  #touch { gap: 5px; right: 8px; bottom: 8px; }
+  #touch button { width: 72px; height: 52px; font-size: 18px; }
+  #touch button[data-k="eb"] { height: 36px; }
+}
+
+/* 路線の選択（タイトル最上部のカード） */
+.lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.lines button { position: relative; text-align: left; padding: 10px 12px 10px 14px; border-radius: 10px; border: 1px solid var(--line); color: #dfe6ee; cursor: pointer;
+  background: #1b2330; font-size: 15px; line-height: 1.35; overflow: hidden; }
+.lines button::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #4a5566; }
+.lines button b { display: block; font-size: 16px; }
+.lines button small { display: block; margin-top: 3px; font-size: 11px; color: #9aa6b6; }
+.lines button.line-coast::before { background: linear-gradient(#4aa8ff, #2a6fd0); }
+.lines button.line-mountain::before { background: linear-gradient(#6fbf5a, #2f6b3a); }
+.lines button.on.line-coast { background: linear-gradient(135deg, #1f4f8f, #173a66); border-color: #4aa8ff; }
+.lines button.on.line-mountain { background: linear-gradient(135deg, #2f6b3a, #1d4528); border-color: #6fbf5a; }
+.lines button.on small { color: #d6e2ee; }
+.lines button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+@media (max-width: 420px) {
+  .lines { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .lines button { padding: 8px 8px 8px 11px; }
+  .lines button b { font-size: 14px; }
+  .lines button small { font-size: 10px; }
+}
+@media (max-height: 500px) {
+  .lines { margin-top: 6px; }
+  .lines button small { display: none; }
+}
+
+/* ---- 一時停止: 右上の制限速度パネルの下のボタンと、中央の停止画面 ---- */
+#topRight { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+#pauseBtn { pointer-events: auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 96px; min-height: 44px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: 700 13px/1 inherit; font-family: inherit;
+  cursor: pointer; touch-action: manipulation; backdrop-filter: blur(4px); }
+#pauseBtn[hidden] { display: none; }
+#pauseBtn:hover { background: rgba(40,50,66,.9); }
+#pauseBtn:focus-visible { outline: 2px solid #8fd3ff; outline-offset: 2px; }
+/* 一時停止の記号（2本線）。フォント依存の絵文字を使わない */
+#pauseBtn i { width: 12px; height: 14px; border-left: 4px solid currentColor; border-right: 4px solid currentColor; box-sizing: border-box; }
+body.cam-replay #pauseBtn { display: none; }
+#pauseOverlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(5,8,12,.55); backdrop-filter: blur(2px); }
+#pauseOverlay[hidden] { display: none; }
+.pauseCard { width: min(340px, 100%); text-align: center; background: #121823; border: 1px solid var(--line); border-radius: 16px; padding: 22px 22px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+#pauseTitle { font-size: 26px; font-weight: 800; letter-spacing: .12em; }
+.pauseCard .sub { margin-top: 6px; line-height: 1.5; }
+.pauseCard .btn { min-height: 48px; margin-top: 12px; }
+.pauseCard .btn#resumeBtn { margin-top: 18px; }
+.pauseCard .btn.warn { background: #8a2a1e; font-size: 14px; }
+.pauseKeys { margin: 12px 0 0; font-size: 11px; color: var(--muted); }
+/* 停止中は操作ボタンを押せないことを示す */
+body.paused #touch { opacity: .35; pointer-events: none; }
+@media (max-width: 640px) {
+  #pauseBtn { min-width: 0; padding: 0 10px; }
+}
+/* 横向きスマホ: 上部の高さを抑える（制限速度パネルの横幅に合わせる） */
+@media (max-height: 500px) {
+  /* 右端は操作ボタンの列が上まで伸びるので、ボタンは制限速度パネルの左に並べる */
+  #topRight { flex-direction: row-reverse; align-items: flex-start; gap: 6px; }
+  #pauseBtn { min-height: 40px; min-width: 0; padding: 0 10px; font-size: 12px; }
+  .pauseCard { padding: 14px 18px 10px; }
+  #pauseTitle { font-size: 22px; }
+  .pauseCard .btn { min-height: 42px; margin-top: 8px; padding: 10px; }
+  .pauseCard .btn#resumeBtn { margin-top: 12px; }
+  .pauseKeys { margin-top: 8px; }
+}
+
+/* ---- 信号による制限の連動表示（全幅共通）: 信号が線路の制限より低いとき標識を暗地＋黄の数字にする ---- */
+#limitPanel.sigcut .limitSign { background: #1b1f27; color: #ffc53d; border-color: #ffc53d; box-shadow: 0 0 10px rgba(255,197,61,.55); }
+#limitPanel.sigcut .lbl::after { content: ' ・信号制限'; color: #ffc53d; }
+#limitPanel.sigcut.over .limitSign { animation: blink .4s steps(2) infinite; }
+
+/* ---- PC 幅: 視線を左1か所に集める。左カラム = 種別 → 次の信号 → 制限速度（右上から移動）→ ドア → 時刻表 ----
+   制限速度パネルは hud.ts が同じ条件で #sidePanel へ移す。右上には一時停止ボタンだけが残る。
+   スマホ・タッチ端末（any-pointer: coarse）は従来の配置のまま。 */
+@media (min-width: 900px) and (min-height: 600px) and (any-pointer: fine) {
+  #sidePanel { top: 116px; width: 264px; font-size: 14px; gap: 7px; max-height: calc(100vh - 116px - 18px); }
+  #sidePanel .panel { padding: 8px 12px; }
+  .sp-svc { font-size: 15px; }
+  .sp-sig .lbl { font-size: 12px; }
+  .sigRow { gap: 14px; margin-top: 4px; }
+  .sigLamps { grid-template-columns: 17px; gap: 4px; padding: 5px; }
+  .sigLamps i { width: 17px; height: 17px; }
+  #sigTxt { font-size: 22px; }
+  #sigDist { font-size: 15px; color: #c9d2de; }
+  #atsLine { font-size: 12px; margin-top: 6px; }
+  #sidePanel #limitPanel { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "sign lbl" "sign next"; column-gap: 14px; align-items: center; text-align: left; min-width: 0; }
+  #limitPanel .lbl { grid-area: lbl; align-self: end; font-size: 12px; }
+  #limitPanel .limitSign { grid-area: sign; margin: 0; width: 66px; height: 66px; font-size: 27px; border-width: 6px; }
+  #limitPanel .sub { grid-area: next; align-self: start; font-size: 14px; color: #c9d2de; margin-top: 2px; }
+  #limitPanel .sub b { color: #fff; }
+  #sidePanel .sp-tt { flex: 0 1 auto; min-height: 0; overflow: hidden; }
+  #ttTable { font-size: 13px; }
+  #topRight { margin-top: 2px; }
+}
+/* 画面が低い PC: 時刻表を詰める（はみ出る分は hud.ts が次駅付近へ寄せる） */
+@media (min-width: 900px) and (min-height: 600px) and (max-height: 760px) and (any-pointer: fine) {
+  #sidePanel { top: 108px; gap: 5px; max-height: calc(100vh - 108px - 12px); }
+  #sidePanel .panel { padding: 5px 10px; }
+  .sigLamps { grid-template-columns: 14px; padding: 4px; gap: 3px; }
+  .sigLamps i { width: 14px; height: 14px; }
+  #sigTxt { font-size: 20px; }
+  #limitPanel .limitSign { width: 56px; height: 56px; font-size: 23px; }
+  #ttTable { font-size: 12px; }
+  #ttTable td { padding: 0 2px; }
+}
+/* 大きい PC 画面: 左カラムをもう一回り大きく */
+@media (min-width: 1500px) and (min-height: 860px) and (any-pointer: fine) {
+  #sidePanel { top: 128px; width: 300px; font-size: 16px; max-height: calc(100vh - 128px - 24px); }
+  .sp-svc { font-size: 17px; }
+  .sigLamps { grid-template-columns: 20px; } .sigLamps i { width: 20px; height: 20px; }
+  #sigTxt { font-size: 26px; } #sigDist { font-size: 17px; } #atsLine { font-size: 14px; }
+  #limitPanel .limitSign { width: 78px; height: 78px; font-size: 32px; }
+  #limitPanel .sub { font-size: 16px; } #limitPanel .lbl { font-size: 13px; }
+  #ttTable { font-size: 15px; }
+}
+
+/* ---- 数値の安全策: 長い値でもパネルからはみ出さない ---- */
+.limitSign { overflow: hidden; white-space: nowrap; }
+#limitPanel { max-width: 100%; overflow: hidden; }
+#nextLimit, #sigTxt, #sigDist, #dist, #nextSta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+#sidePanel .sub, #atsLine { overflow-wrap: anywhere; }
+
+/* ---- PC 幅: 残距離パネルを画面中央（運転台の計器の上・線路の見える位置）へ。スマホは従来位置 ---- */
+@media (min-width: 900px) and (min-height: 600px) and (any-pointer: fine) {
+  #distPanel { position: fixed; left: 50%; bottom: 25%; transform: translateX(-50%); z-index: 5; min-width: 230px; max-width: 360px;
+    text-align: center; padding: 6px 18px 8px; background: rgba(14,18,26,.5); border-color: rgba(255,255,255,.18); transition: background .2s, border-color .2s; }
+  #distPanel .lbl { font-size: 13px; color: #c9d2de; }
+  #dist { font-size: 54px; line-height: 1.05; font-weight: 800; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
+  #distPanel .sub { font-size: 14px; color: #dbe3ee; text-shadow: 0 1px 4px #000; }
+  #distPanel.near { background: rgba(70,52,0,.55); border-color: #ffe066; box-shadow: 0 0 14px rgba(255,224,102,.45); }
+  #distPanel.near #dist { color: #ffe066; }
+  #distPanel.over { background: rgba(80,20,16,.55); border-color: #ff7a6a; }
+  #distPanel.over #dist { color: #ff9a8a; }
+}
+@media (min-width: 900px) and (min-height: 600px) and (max-height: 760px) and (any-pointer: fine) {
+  #distPanel { bottom: 24%; min-width: 200px; } #dist { font-size: 44px; }
+}

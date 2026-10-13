@@ -1,0 +1,33 @@
+{
+  "name": "densha-hankyu",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "verify:clearance": "esbuild scripts/check-clearance.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/check-clearance.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/check-clearance.mjs",
+    "verify:izumisano": "esbuild scripts/verify-izumisano.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-izumisano.mjs --log-level=warning && node node_modules/.cache/verify-izumisano.mjs",
+    "verify:scenery": "esbuild scripts/verify-scenery-lod.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-scenery-lod.mjs --log-level=warning && node node_modules/.cache/verify-scenery-lod.mjs",
+    "verify:routes": "esbuild scripts/verify-shiokaze.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-shiokaze.mjs --log-level=warning && node node_modules/.cache/verify-shiokaze.mjs",
+    "verify:oncoming": "esbuild scripts/verify-oncoming.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-oncoming.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/verify-oncoming.mjs",
+    "oncoming:meets": "esbuild scripts/oncoming-meets.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/oncoming-meets.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/oncoming-meets.mjs",
+    "timetable": "esbuild scripts/timetable.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/timetable.mjs --log-level=warning && node node_modules/.cache/timetable.mjs",
+    "crossings:south": "esbuild scripts/build-crossings.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/build-crossings.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/build-crossings.mjs",
+    "osm:scenery": "esbuild scripts/osm-scenery.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/osm-scenery.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/osm-scenery.mjs",
+    "geometry:south": "esbuild scripts/route-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/route-geometry.mjs --log-level=warning && node node_modules/.cache/route-geometry.mjs --chain=south",
+    "geometry:misaki-wakayamako": "esbuild scripts/slice-south-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/slice-south-geometry.mjs --log-level=warning && node node_modules/.cache/slice-south-geometry.mjs",
+    "geometry:hankyu": "esbuild scripts/route-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/route-geometry.mjs --log-level=warning && node node_modules/.cache/route-geometry.mjs --chain=hankyu-kobe",
+    "geometry:hankyu-slice": "esbuild scripts/slice-hankyu-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/slice-hankyu-geometry.mjs --log-level=warning && node node_modules/.cache/slice-hankyu-geometry.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}

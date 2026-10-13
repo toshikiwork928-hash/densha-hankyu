@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>南海本線 運転シミュレーター</title>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cabframe"></div>
+
+<div id="hud">
+  <div id="topbar">
+    <div class="panel">
+      <div class="lbl">現在時刻</div>
+      <div id="clock">10:00:00</div>
+      <div class="sub">定刻 <span id="sched"></span> 着 <span id="delay"></span></div>
+    </div>
+    <div id="banner"></div>
+    <div id="topRight">
+      <div class="panel" id="limitPanel">
+        <div class="lbl">制限速度</div>
+        <div class="limitSign" id="limit">90</div>
+        <div class="sub" id="nextLimit">&nbsp;</div>
+      </div>
+      <button id="pauseBtn" type="button" aria-label="一時停止（Esc / P）" title="一時停止（Esc / P）" hidden><i aria-hidden="true"></i><span>一時停止</span></button>
+    </div>
+  </div>
+  <div id="dash">
+    <div class="panel" id="distPanel">
+      <div class="lbl">停止位置まで</div>
+      <div id="dist">-</div>
+      <div class="sub" id="nextSta"></div>
+    </div>
+    <canvas id="meter" width="460" height="460"></canvas>
+    <div class="panel"><div id="notches"></div></div>
+  </div>
+</div>
+
+<div id="touch">
+  <button data-k="up">▲<small>力行側</small></button>
+  <button data-k="down">▼<small>ブレーキ側</small></button>
+  <button data-k="eb">EB</button>
+</div>
+
+<div id="pauseOverlay" role="dialog" aria-modal="true" aria-labelledby="pauseTitle" hidden>
+  <div class="pauseCard">
+    <div id="pauseTitle">一時停止中</div>
+    <div class="sub" id="pauseInfo"></div>
+    <button class="btn" id="resumeBtn" type="button">再開</button>
+    <button class="btn sub2" id="quitBtn" type="button">タイトルへ戻る</button>
+    <p class="pauseKeys"><kbd>Esc</kbd> / <kbd>P</kbd> / ゲームパッド Start で再開</p>
+  </div>
+</div>
+
+<div id="overlay"><div class="card" id="card"></div></div>
+
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>

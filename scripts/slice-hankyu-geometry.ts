@@ -3,7 +3,7 @@
 // 実行: npm run geometry:hankyu-slice
 // 各コースは始発駅の停止位置が s=PRE。始発駅の手前が足りない（大阪梅田）ときは直線を足す。終点の先は直線で TAIL [m] 延ばす。
 // 切る位置は駅のホームの直線の中（route-geometry.ts がホームの範囲を直線にしている）。
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 type Seg = { type: 'straight'; length: number } | { type: 'arc'; radius: number; angle: number; turn: 'L' | 'R' };
 interface Src {
@@ -103,7 +103,9 @@ for (const [id, a, b, pre] of [['EAST', '大阪梅田', '西宮北口', 180], ['
   const x = slice(a, b, pre, 400);
   out.push('', `/** ${a}〜${b}。総延長（TAIL を除く）${x.total.toFixed(1)}m */`, `export const HK_${id}: HankyuSection = ${lit({ segments: x.segs, gradients: x.gradients, structures: x.structures, rivers: x.rivers, relief: x.relief, ground: x.ground, distances: x.distances, pre: x.pre, tail: x.tail, jr: x.jr })};`);
   const course = id === 'EAST' ? 'hankyu-kobe-east' : 'hankyu-kobe-west';
-  writeFileSync(`src/data/osm/${course}.json`, JSON.stringify({ source: '© OpenStreetMap contributors（ODbL 1.0）の川の中心線に幅を与えた手作りの水面（建物・道路なし）', course, range: 320, fetched: '2026-10-13', buildings: [], roads: [], highways: [], areas: x.water, landmarks: [] }));
+  // OSM から建物・道路まで取得済みのデータ（npm run osm:scenery）があれば上書きしない
+  const cur = existsSync(`src/data/osm/${course}.json`) ? JSON.parse(readFileSync(`src/data/osm/${course}.json`, 'utf8')) : null;
+  if (!cur?.buildings?.length) writeFileSync(`src/data/osm/${course}.json`, JSON.stringify({ source: '© OpenStreetMap contributors（ODbL 1.0）の川の中心線に幅を与えた手作りの水面（建物・道路なし）', course, range: 320, fetched: '2026-10-13', buildings: [], roads: [], highways: [], areas: x.water, landmarks: [] }));
   console.log(`${a}〜${b}: 線形 ${x.segs.length}、勾配 ${x.gradients.length}、構造物 ${x.structures.length}、川 ${x.rivers.length}`);
 }
 writeFileSync('src/route/routes/hankyu-kobe-geometry.ts', out.join('\n') + '\n');

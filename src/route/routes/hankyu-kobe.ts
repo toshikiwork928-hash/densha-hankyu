@@ -3,11 +3,17 @@
 //   コース2 hankyu-kobe-west: 西宮北口 → 神戸三宮（9駅・16.7km）
 // 営業キロは Wikipedia「阪急神戸本線」。線形・勾配・橋・高架は hankyu-kobe-geometry.ts（OSM と国土地理院の標高から作った下書き。実測ではない）。
 // 駅の高架・地上の別とホームの形式は Wikipedia の各駅の記事「駅構造」（2026-10-13 閲覧）。配線略図との照合と、頭端式・2面3線・3面4線などの細部は未実施（概形で近似）。
-// 時刻表は駅間距離からの概算（仮値）。種別は普通だけ（停車駅の照合前のため）。
-import type { ExtraTrack, Route, Sign, SpeedLimit, Station, StationIsland, StationLoop } from '../types';
+// 種別と停車駅（Wikipedia「阪急神戸本線」運行形態、2025年2月22日改正の報道。2026-10-13 閲覧）:
+//   普通 = 全駅。特急 = 大阪梅田・十三・西宮北口・夙川・岡本・神戸三宮（終日）。通勤特急（平日朝）= 特急 + 塚口。準特急（平日夕・夜）= 特急 + 塚口・六甲。
+//   急行・快速・準急は、停車駅の一覧が確かめられないので入れない。行先は下り 新開地（神戸高速線へ直通）、上り 大阪梅田。
+//   選べる種別は、そのコースで停車駅が普通と違うものだけ（梅田〜西宮北口は 普通・特急・通勤特急、西宮北口〜三宮は 普通・特急・準特急）。
+// 時刻表は自動運転の最速走行 +5%（npm run timetable:hankyu。scripts/timetable-hankyu.ts）。停車 25 秒はゲーム用。
+import type { ExtraTrack, Route, Sign, SpeedLimit, Station, StationIsland, StationLoop, StationStructure } from '../types';
 import { reverseRoute } from '../reverse';
 import { islandZone, loopZone } from '../service';
 import { HK_EAST, HK_WEST, type HankyuSection } from './hankyu-kobe-geometry';
+import { HKT } from './hankyu-kobe-timetable';
+import type { ServiceId, ServiceSpec } from '../types';
 
 /** 駅の仮の形。island = 島式1面2線、relative = 相対式2面2線、loop = 島式2面4線（待避線つき） */
 type Kind = 'island' | 'relative' | 'loop' | 'loop-outside';
@@ -72,7 +78,24 @@ function structuresOf(sec: HankyuSection) {
   return out;
 }
 
-function build(id: string, name: string, sec: HankyuSection, list: Sta[], headStart: boolean, extra: { viaducts?: [number, number][]; limits?: SpeedLimit[]; extraTracks?: ExtraTrack[] } = {}): Route {
+/** 地上駅の駅舎・改札の位置とホーム間の連絡（Wikipedia 各駅「駅構造」、2026-10-13 閲覧）。end の namba = 大阪梅田寄り、wakayama = 神戸三宮寄り（下りの座標）。
+ *  芦屋川（駅舎は芦屋川の西岸。どちらのホーム側か・連絡の方法は記載なし）と、橋上駅舎の西宮北口・六甲、高架駅は標準の形のまま */
+const STRUCT: Record<string, StationStructure> = {
+  神崎川: { building: 'down', end: 'wakayama', link: 'underpass' }, // 改札は下層の梅田寄りと、三宮方面ホームの三宮寄り
+  塚口: { building: 'both', end: 'wakayama', link: 'underpass' }, // 三宮寄りに北口・南口、地下道2か所
+  武庫之荘: { building: 'both', end: 'wakayama', link: 'footbridge' }, // 三宮寄り、南口（下り側）・北口（上り側）、地下道と跨線橋
+  夙川: { building: 'both', end: 'namba', link: 'underpass' }, // 南北に改札、東寄り（梅田寄り）の地下道
+  岡本: { building: 'both', end: 'namba', link: 'underpass' }, // 駅舎は三宮方面ホームの梅田寄り、梅田方面ホームにも改札、地下道
+  御影: { building: 'both', end: 'namba', link: 'underpass' }, // 両ホームの梅田寄りに改札（下層のコンコース）、地下道
+};
+
+/** [id, 名前, 停車駅（null = 全駅）] */
+type Svc = [ServiceId, string, string[] | null];
+const TOKKYU = ['大阪梅田', '十三', '西宮北口', '夙川', '岡本', '神戸三宮'];
+const SVC_EAST: Svc[] = [['local', '普通', null], ['limited', '特急', TOKKYU], ['express', '通勤特急', [...TOKKYU, '塚口']]];
+const SVC_WEST: Svc[] = [['local', '普通', null], ['limited', '特急', TOKKYU], ['express', '準特急', [...TOKKYU, '塚口', '六甲']]];
+
+function build(id: string, name: string, sec: HankyuSection, list: Sta[], svcs: Svc[], headStart: boolean, extra: { viaducts?: [number, number][]; limits?: SpeedLimit[]; extraTracks?: ExtraTrack[] } = {}): Route {
   const added = (extra.viaducts ?? []).map(([from, to]) => ({ kind: 'viaduct' as const, from, to }));
   // 足した高架橋の中にある OSM の高架橋は除く（二重に描かない）
   const structures = [...structuresOf(sec).filter(x => !(x.kind === 'viaduct' && added.some(v => x.from >= v.from && x.to <= v.to))), ...added].sort((a, b) => a.from - b.from);
@@ -86,6 +109,7 @@ function build(id: string, name: string, sec: HankyuSection, list: Sta[], headSt
       ...(elev ? { elevated: true } : {}),
       ...(kind === 'island' ? { island: { ...ISLAND } } : kind === 'loop' ? { loop: { ...LOOP } } : kind === 'loop-outside' ? { loop: { ...LOOP, outside: true } } : { layout: 'relative' as const }),
       ...(i === 0 && headStart ? { headEnd: true } : {}),
+      ...(STRUCT[nm] ? { structure: { ...STRUCT[nm] } } : {}),
     };
   });
   const limits: SpeedLimit[] = [];
@@ -120,12 +144,16 @@ function build(id: string, name: string, sec: HankyuSection, list: Sta[], headSt
     segments: sec.segments, elevation0: 0, groundFollowsTrack: true,
     gradients: sec.gradients, limits: limits.sort((a, b) => a.from - b.from), stations,
     services: [
-      { id: 'local', name: '普通', cars: 8, units: [8], kind: 'hankyu-2000', lineLimit: LINE_LIMIT, stops: stations.map((_, i) => i), timetable: tt, destination: list[LAST][0], destinationKana: list[LAST][1] },
+      ...svcs.map(([sid, nm, stopNames]): ServiceSpec => ({ id: sid, name: nm, cars: 8, units: [8], kind: 'hankyu-2000', lineLimit: LINE_LIMIT,
+        stops: stations.map((_, i) => i).filter(i => !stopNames || stopNames.includes(stations[i].name)), timetable: HKT[id]?.[sid] ?? tt,
+        destination: '新開地', destinationKana: 'しんかいち' })),
     ],
+    // 先行の普通: 途中に待避が無い（特急は普通を西宮北口で追い越す）ので、優等列車が追いつかない間隔で先に出す（日中は10分間隔。ゲーム用）
+    precedingHeadway: { limited: 600, express: 600 },
     prevName: '', nextName: '', signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
     extent: { from: -400, to: end }, tracks: [0, 4],
-    // 建物は後日（ユーザー指示 2026-10-13: 当面は線路・高架・川だけ）。手続き生成の街並みも置かない
-    scenery: { cityZones: [] }, noInfill: [{ from: -1000, to: end + 1000 }],
+    // 沿線は全線が市街地（大阪・尼崎・西宮・芦屋・神戸）。OSM の建物のある所はそれを置き、無い所は手続き生成の市街地で埋める
+    scenery: { cityZones: [{ from: -1000, to: end + 1000 }] },
     oncoming: [], signals, crossings: [],
     structures, relief: sec.relief, viaductHeight: 8, extraTracks: extra.extraTracks,
     terminalApproach: false,
@@ -135,19 +163,60 @@ function build(id: string, name: string, sec: HankyuSection, list: Sta[], headSt
 
 // 大阪梅田〜淀川橋梁は高架（中津も高架駅）。OSM は駅ビルの下が tunnel、中津の前後が途切れているので、梅田の駅ビルから淀川橋梁の手前までを高架橋で埋める
 const yodogawa = HK_EAST.structures.find(x => x.kind === 'bridge' && HK_EAST.rivers.some(r => r.name === '淀川' && r.s >= x.from && r.s <= x.to))!;
-// 梅田〜十三の3複線: 神戸線の右（東側）に宝塚線、その右に京都線（配線略図 011_01、Wikipedia「中津駅 (阪急)」）。描画だけの線路。
-// 横位置はゲーム用の仮値（中津・十三の島式ホームが収まる間隔）。十三の先で宝塚線・京都線は右へ分かれる（実際の分かれ方は概形）
+// ---- 大阪梅田（頭端式10面9線）: 配線略図 011_01。西（下り本線の左）から神戸線3線・宝塚線3線・京都線3線が 9.4m ごとに並び、線路の間と両外側にホーム（10面）。
+// 神戸線: A（下り本線。横位置 -3.2）・B（上り本線 7.2）・C（16.6）。駅の先で B と C が合流し、A・B は 0・4 へ寄る。
+// 宝塚線（26・35.4・44.8）・京都線（54.2・63.6・73）は駅の先でそれぞれ2線になり、十三まで神戸線の右に並ぶ（描画だけ）。
+// 線路の間隔・ホームの幅（6m。A と B の間は 7m）・合流の位置はゲーム用の概形。号線の対応（神戸線は7〜9号線）は表示していない
+const UMEDA = { A: -3.2, B: 7.2, C: 16.6, pitch: 9.4 } as const;
+const umedaStop = HK_EAST.pre + HK_EAST.distances['大阪梅田'];
+const U_OUT = umedaStop + 40, U_IN = umedaStop + 420; // 寄せ始め・寄せ終わり
 const juso = HK_EAST.pre + HK_EAST.distances['十三'];
-const parallel = (id: string, lat: number, away: number, outFrom: number): ExtraTrack => ({
+/** 宝塚線・京都線の本線（梅田の lat0 から、十三まで lat、十三の先で右へ away 離れる） */
+const parallel = (id: string, lat0: number, lat: number, away: number, outFrom: number): ExtraTrack => ({
   id, from: 0, to: outFrom + 500, bumpers: [0],
-  lat: [[0, lat], [juso - 250, lat], [juso - 120, lat + 3], [juso + 80, lat + 3], [outFrom, lat + 3], [outFrom + 500, lat + away]],
+  lat: [[0, lat0], [U_OUT, lat0], [U_IN + 200, lat], [juso - 250, lat], [juso - 120, lat + 3], [juso + 80, lat + 3], [outFrom, lat + 3], [outFrom + 500, lat + away]],
 });
+/** 梅田の3線目（駅の先で隣の線へ合流する短い線） */
+const merge = (id: string, lat0: number, into: number, end: number): ExtraTrack => ({ id, from: 0, to: end, bumpers: [0], lat: [[0, lat0], [U_OUT, lat0], [end, into]] });
+const L = (k: number) => UMEDA.C + UMEDA.pitch * k; // 宝塚線・京都線の線路（k = 1〜6）
 const HANSHIN_LINES: ExtraTrack[] = [
-  parallel('takarazuka-down', 11, 60, juso + 250), parallel('takarazuka-up', 15, 60, juso + 250),
-  parallel('kyoto-down', 19.5, 110, juso + 150), parallel('kyoto-up', 23.5, 110, juso + 150),
+  merge('kobe-c', UMEDA.C, 4, U_IN),
+  parallel('takarazuka-down', L(1), 11, 60, juso + 250), parallel('takarazuka-up', L(2), 15, 60, juso + 250), merge('takarazuka-3', L(3), 15, U_IN + 150),
+  parallel('kyoto-down', L(4), 19.5, 110, juso + 150), parallel('kyoto-up', L(5), 23.5, 110, juso + 150), merge('kyoto-3', L(6), 23.5, U_IN + 200),
 ];
-export const hankyuKobeEast = build('hankyu-kobe-east', '阪急神戸線 大阪梅田 → 西宮北口', HK_EAST, EAST, true, { viaducts: [[-300, Math.round(yodogawa.from) + 5]], extraTracks: HANSHIN_LINES });
-const upTT = (r: Route) => ({ local: roughTimetable(r.stations.map(st => -st.stopS).reverse()) });
+const UMEDA_PLATFORMS: NonNullable<Station['customPlatforms']> = [
+  { kind: 'island', lat: UMEDA.A - 4.7, width: 6, from: 0, roof: 1 },
+  { kind: 'island', lat: (UMEDA.A + UMEDA.B) / 2, width: 7, from: 0, roof: 1 },
+  ...Array.from({ length: 8 }, (_, k) => ({ kind: 'island' as const, lat: UMEDA.B + UMEDA.pitch / 2 + UMEDA.pitch * k, width: 6, from: 0, roof: 1 })),
+];
+
+// ---- 塚口: 下りは単式、上りは伊丹線（3号線）と共用の島式。伊丹線は駅の先で右（北）へ分かれる。梅田寄りに伊丹線の行き止まりの線（配線略図 010_02）
+const tsuka = HK_EAST.pre + HK_EAST.distances['塚口'];
+const ITAMI = 13.4;
+const ITAMI_TRACK: ExtraTrack = { id: 'itami', from: tsuka - 230, to: tsuka + 420, bumpers: [tsuka - 230], lat: [[tsuka - 230, ITAMI], [tsuka + 30, ITAMI], [tsuka + 140, ITAMI + 8], [tsuka + 420, ITAMI + 90]] };
+
+// ---- 西宮車庫: 西宮北口の梅田寄りの右（北東）に留置線が並ぶ（配線略図 010_03、OSM の道路「車庫北線」の位置）。本数・長さは概形（12本・約600m）
+const depotTracks = (c: number, from: number): ExtraTrack[] => Array.from({ length: 12 }, (_, k): ExtraTrack => {
+  const a = Math.max(from, c - 950 + k * 12), lat = 24 + k * 4.6;
+  return { id: `nishinomiya-depot-${k}`, from: a, to: c - 250, bumpers: [a], noWire: k % 2 === 1, lat: [[a, lat], [c - 340 - k * 6, lat], [c - 250, 14]] };
+});
+const nishiE = HK_EAST.pre + HK_EAST.distances['西宮北口'];
+/** 直角の支線（world/hankyu-branches.ts）の敷地。西宮北口の今津線（北・南）。c = 停止位置。ホームの中心は停止位置の約80m手前 */
+const branchReserved = (c: number): NonNullable<Route['reserved']> => [
+  { from: c - 110, to: c - 50, lat0: 16, lat1: 430 }, { from: c - 100, to: c - 60, lat0: -430, lat1: -14 },
+];
+export const hankyuKobeEast = build('hankyu-kobe-east', '阪急神戸線 大阪梅田 → 西宮北口', HK_EAST, EAST, SVC_EAST, true, {
+  viaducts: [[-300, Math.round(yodogawa.from) + 5]], extraTracks: [...HANSHIN_LINES, ITAMI_TRACK, ...depotTracks(nishiE, 0)],
+});
+{
+  const r = hankyuKobeEast, umeda = r.stations[0], ts = r.stations.find(x => x.name === '塚口')!;
+  Object.assign(umeda, { layout: 'custom', customPlatforms: UMEDA_PLATFORMS, island: undefined });
+  r.trackProfiles = { 0: [[0, UMEDA.A], [U_OUT, UMEDA.A], [U_IN, 0]], 4: [[0, UMEDA.B], [U_OUT, UMEDA.B], [U_IN, 4]] };
+  Object.assign(ts, { layout: 'custom', customPlatforms: [{ kind: 'side', lat: 0, side: 'L' }, { kind: 'island', lat: (4 + ITAMI) / 2, width: ITAMI - 4 - 3.4 }] });
+  // 梅田の駅（ターミナルビル）と車庫の敷地には建物を置かない
+  r.reserved = [{ from: -300, to: umedaStop + 60, lat0: -15, lat1: 95 }, { from: nishiE - 960, to: nishiE - 240, lat0: 18, lat1: 85 }, ...branchReserved(nishiE)];
+}
+const upTT = (r: Route) => Object.fromEntries((r.services ?? []).map(v => [v.id, HKT[`${r.id}-up`]?.[v.id] ?? roughTimetable(r.stations.map(st => -st.stopS).reverse())]));
 export const hankyuKobeEastUp = reverseRoute(hankyuKobeEast, { id: 'hankyu-kobe-east-up', name: '阪急神戸線 西宮北口 → 大阪梅田', timetable: upTT(hankyuKobeEast), signs: approachSigns });
 // 御影の東の S字は 90km/h 制限（Wikipedia）。位置は不明のため、岡本〜御影の住吉川の前後に仮置き
 const mikage = HK_WEST.pre + HK_WEST.distances['御影'];
@@ -162,11 +231,17 @@ const jrTracks: ExtraTrack[] = (() => {
   pts.push([end, pts[pts.length - 1][1]]);
   return [-6, -2, 2, 6].map((d, k) => ({ id: `jr-${k}`, from: pts[0][0], to: end, lat: pts.map(([q, l]) => [q, Math.round((l + d) * 10) / 10] as [number, number]) }));
 })();
-export const hankyuKobeWest = build('hankyu-kobe-west', '阪急神戸線 西宮北口 → 神戸三宮', HK_WEST, WEST, false, { limits: [{ from: mikage - 1300, to: mikage - 500 + TRAIN_LEN, kmh: 90, label: 'S字 90km/h（位置は仮）' }], extraTracks: jrTracks });
+export const hankyuKobeWest = build('hankyu-kobe-west', '阪急神戸線 西宮北口 → 神戸三宮', HK_WEST, WEST, SVC_WEST, false, { limits: [{ from: mikage - 1300, to: mikage - 500 + TRAIN_LEN, kmh: 90, label: 'S字 90km/h（位置は仮）' }], extraTracks: [...jrTracks, ...depotTracks(HK_WEST.pre + HK_WEST.distances['西宮北口'], 0)] });
+{
+  const r = hankyuKobeWest, c = HK_WEST.pre + HK_WEST.distances['西宮北口'], sh = HK_WEST.pre + HK_WEST.distances['夙川'];
+  r.reserved = [{ from: 0, to: c - 240, lat0: 18, lat1: 85 }, ...branchReserved(c), { from: sh - 100, to: sh - 60, lat0: 10, lat1: 330 }];
+}
 export const hankyuKobeWestUp = reverseRoute(hankyuKobeWest, { id: 'hankyu-kobe-west-up', name: '阪急神戸線 神戸三宮 → 西宮北口', timetable: upTT(hankyuKobeWest), signs: approachSigns });
 // 大阪梅田は頭端式。上り（梅田行）の終点は車止めの手前で止まる
 hankyuKobeEastUp.terminalApproach = true;
-for (const r of [hankyuKobeEastUp, hankyuKobeWestUp]) {
-  const svc = r.services![0], first = r.stations[r.stations.length - 1];
-  svc.destination = first.name; svc.destinationKana = first.kana;
+// 上りは s と左右が反転するので、駅舎のホーム（下り・上り）と位置（梅田寄り・三宮寄り）を入れ替える（reverseRoute は structure をそのまま写す）
+const SWAP_B = { down: 'up', up: 'down', both: 'both' } as const, SWAP_E = { namba: 'wakayama', wakayama: 'namba', center: 'center', ends: 'ends' } as const;
+for (const r of [hankyuKobeEastUp, hankyuKobeWestUp]) for (const st of r.stations) if (st.structure) {
+  st.structure = { ...st.structure, building: SWAP_B[st.structure.building], ...(st.structure.end ? { end: SWAP_E[st.structure.end] } : {}) };
 }
+for (const r of [hankyuKobeEastUp, hankyuKobeWestUp]) for (const svc of r.services!) { svc.destination = '大阪梅田'; svc.destinationKana = 'おおさかうめだ'; }

@@ -24,6 +24,7 @@ const formationsFor = (svc: ServiceSpec, kind: TrainKind): number[][] =>
 
 /** 路線側に書かれた候補へ、空港急行など共通生成される候補を補う。 */
 export function playerVehicleOptions(svc: ServiceSpec): PlayerVehicleOptions {
+  if (svc.kind === 'hankyu-2000') return { kinds: [svc.kind], formations: [svc.units] }; // 阪急版は2000系だけ（南海の車種を足さない）
   if (svc.kind === 'commuter-2300') return { kinds: [svc.kind], formations: svc.formationOptions ?? [svc.units] };
   if (svc.id === 'southern') return {
     kinds: ['southern-10000', 'southern-12000'],

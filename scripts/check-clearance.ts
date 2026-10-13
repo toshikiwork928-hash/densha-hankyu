@@ -14,6 +14,7 @@ import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
 import { buildTrack } from '../src/route/track';
+import { hankyuKobeEast, hankyuKobeEastUp, hankyuKobeWest, hankyuKobeWestUp } from '../src/route/routes/hankyu-kobe';
 import { applyService } from '../src/route/service';
 import type { Route, ServiceId } from '../src/route/types';
 import { createState } from '../src/game/state';
@@ -71,6 +72,9 @@ async function build(ctx: GameContext): Promise<void> {
   buildSigns(ctx);
   buildStations(ctx);
   buildEndBlock(ctx);
+  (await import('../src/world/hankyu-branches')).buildHankyuBranches(ctx);
+  const landmarks = await import('../src/world/hankyu-landmarks').catch(() => null);
+  landmarks?.buildHankyuLandmarks(ctx);
   const town = buildTown(ctx);
   buildSignals(ctx);
   buildCrossings(ctx, fakeOncoming);
@@ -100,13 +104,9 @@ async function build(ctx: GameContext): Promise<void> {
 const all = process.argv.includes('--all');
 const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const routeFilter = option('route'), serviceFilter = option('service');
-const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
-  [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
-  [izumisano, ['local', 'express', 'airport', 'southern', 'limited']], [izumisanoUp, ['local', 'express', 'airport', 'southern', 'limited']],
-  [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']],
-  [namba, ['local', 'express', 'southern', 'limited']], [nambaUp, ['local', 'express', 'southern', 'limited']],
-  [izumisanoMisaki, ['local', 'express', 'southern']], [izumisanoMisakiUp, ['local', 'express', 'southern']],
-  [misakiWakayamako, ['local', 'express', 'southern']], [misakiWakayamakoUp, ['local', 'express', 'southern']]];
+// 阪急版: 阪急神戸線の4コース（種別はどれも本線を走るので普通で点検。待避は無い）。南海のコースは登録していないので点検しない
+const cases: [Route, ServiceId[]][] = [[hankyuKobeEast, ['local']], [hankyuKobeEastUp, ['local']], [hankyuKobeWest, ['local']], [hankyuKobeWestUp, ['local']]];
+void [shiokaze, shiokazeUp, mountain, mountainUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, izumisanoMisaki, izumisanoMisakiUp, through, throughUp, namba, nambaUp, misakiWakayamako, misakiWakayamakoUp];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {

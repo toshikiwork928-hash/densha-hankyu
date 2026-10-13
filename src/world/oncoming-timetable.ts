@@ -2,6 +2,7 @@
 // 描画距離と運行を分離し、プレイヤーの位置・種別に発車や本数を依存させない。
 import * as THREE from 'three';
 import DATA from '../data/oncoming-timetable.json';
+import HANKYU from '../data/hankyu-oncoming.json';
 import type { GameContext } from '../core/context';
 import type { LatProfile, OncomingSpec, Route, TimeOfDay } from '../route/types';
 import { customPlatformSide, islandOffset, loopShape, loopZone, profileLat, serviceOf, type LoopZone } from '../route/service';
@@ -15,7 +16,7 @@ interface Segment { a: Point; b: Point; speed: number; accelerate: number; brake
 export interface Motion { head: number; v: number; station: number | null; stopped: boolean }
 export const COUNTER_BLOCK_GAP = 300;
 const ACCEL = .8, DECEL = .9, DWELL = 25, MIN_DWELL = 10;
-const tables = DATA.routes as unknown as Record<string, Record<TimeOfDay, TimedTrain[]>>;
+const tables = { ...DATA.routes, ...HANKYU.routes } as unknown as Record<string, Record<TimeOfDay, TimedTrain[]>>; // 阪急神戸線は scripts/timetable-hankyu.ts の規則ダイヤ
 export const counterTimetable = (id: string, tod: TimeOfDay): TimedTrain[] | undefined => tables[id]?.[tod];
 const maximumSpeed = (code: string) => (code === 'L' ? 80 : code === 'S' || code.startsWith('R') ? 105 : 95) / 3.6;
 const keyOf = (a: TimedPoint, b: TimedPoint, code: string) => `${code}|${a.s}|${b.s}|${a.stop}|${b.stop}`;

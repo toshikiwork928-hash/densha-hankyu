@@ -35,6 +35,7 @@ import { downFrame } from './down-frame';
 import { buildIzumisanoAirport } from './izumisano-airport';
 import { buildHagurazakiDepot, buildHagurazakiDepotTrains } from './hagurazaki-depot';
 import { buildHankyuBranches } from './hankyu-branches';
+import { buildHankyuLandmarks } from './hankyu-landmarks';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -58,6 +59,7 @@ export function buildWorld(ctx: GameContext): World {
   buildSigns(ctx);
   buildStations(ctx);
   buildHankyuBranches(ctx); // 阪急: 今津線・甲陽線の直角のホームと線路（rng 不使用）
+  buildHankyuLandmarks(ctx); // 阪急: 沿線の目印（rng 不使用）
   buildEndBlock(ctx);
   const town = buildTown(ctx); // 独自乱数（ctx.rng 不使用）
   buildSignals(ctx); // [A] 閉そく信号機（rng 不使用）

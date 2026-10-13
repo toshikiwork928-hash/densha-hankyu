@@ -25,6 +25,10 @@ const BRANCHES: Branch[] = [
   { station: '西宮北口', tracks: [3], platforms: [{ u: -2.6, w: 5 }], v: [-20, -420], pv: [-20, -150], elevated: 7 },
   { station: '夙川', tracks: [2.5], platforms: [{ u: -2.2, w: 4 }], v: [10, 320], pv: [10, 120] },
 ];
+/** 神戸線と平行に並ぶ、ほかの線のホーム（線路は route.extraTracks）。lat = 下りの座標の中心、u0〜u1 = 駅の中心からの範囲 */
+const SIDE_PLATFORMS: { station: string; lat: number; width: number; u0: number; u1: number }[] = [
+  { station: '中津', lat: 13.5, width: 2.6, u0: -95, u1: 95 }, // 宝塚線の島式（3・4号線。神戸線と同じく狭い）。線路は hankyu-kobe.ts の takarazuka-down（10.5）・up（16.5）
+];
 const GAUGE = .7175;
 
 export function buildHankyuBranches(ctx: GameContext): void {
@@ -80,6 +84,18 @@ export function buildHankyuBranches(ctx: GameContext): void {
         const p = W(c, um, va, 0);
         b.add('m', P.boxB, M(p.x, p.y - 6, p.z, 0, 1.2, dy + 4.8, 1.2), 0x9e9a92);
       }
+    }
+  }
+  for (const sp of SIDE_PLATFORMS) {
+    const st = route.stations.find(x => x.name === sp.station);
+    if (!st) continue;
+    const c = (st.platform.from + st.platform.to) / 2, v = sp.lat - 2, dy = st.elevated ? 0 : 0;
+    for (let u = sp.u0; u < sp.u1; u += 19) {
+      const ue = Math.min(sp.u1, u + 19), p = W(c, u, v, dy), q = W(c, ue, v, dy);
+      seg(p, q, sp.width, 1.1, -.2, 0xb9b4aa);
+      seg(p, q, sp.width * .8, .12, 3.6, 0x6e6a64);
+      for (const sd of [-1, 1]) seg(W(c, u, v + sd * (sp.width / 2 - .15), dy), W(c, ue, v + sd * (sp.width / 2 - .15), dy), .12, .02, .9, 0xe8c840);
+      b.add('m', P.boxB, M(p.x, p.y + .9, p.z, 0, .2, 2.7, .2), 0x8c8a86);
     }
   }
   b.build({ m: new THREE.MeshLambertMaterial({ vertexColors: true }) }, group);

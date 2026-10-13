@@ -71,3 +71,39 @@ import type { ServiceSpec } from '../types';
 
 export const HKT: Record<string, Record<string, ServiceSpec['timetable']>> = ${JSON.stringify(all)};
 `);
+
+// ---- 対向列車（離合）の時刻表: src/data/hankyu-oncoming.json ----
+// 実ダイヤではなくゲーム用の規則: 日中の神戸線と同じく、各方向に特急と普通が10分ごと（特急の1分後に普通）に走る。
+// 走行時間は逆向きのコースの自動運転の時刻表（上の all）。コースの外は 25m/s で出入りする。時間帯ごとに開始時刻の前後を収録
+const START: Record<string, number> = { morning: 7.5 * 3600, noon: 10 * 3600, evening: 17.5 * 3600, night: 21.5 * 3600 };
+const counterOf = (id: string) => id.endsWith('-up') ? id.slice(0, -3) : `${id}-up`;
+const oncoming: Record<string, Record<string, { id: string; code: string; points: { s: number; depart: number; stop: boolean; station: number | null }[] }[]>> = {};
+for (const rid of ids) {
+  const R = ROUTES[rid], C = ROUTES[counterOf(rid)], n = R.stations.length;
+  const head = (i: number) => R.stations[i].stopS - 160; // 対向列車（s の減る向き）の停車時の先頭。ホームに 8両が収まる位置
+  oncoming[rid] = {};
+  for (const [tod, t0] of Object.entries(START)) {
+    const list: (typeof oncoming)[string][string] = [];
+    for (const [svc, code, offset] of [['limited', 'T', 0], ['local', 'L', 60]] as const) { // 特急が先に出て、普通は1分後（普通は特急に追いつかれない）
+      const tt = all[C.id][svc];
+      for (let dep = Math.floor((t0 - 2400) / 600) * 600 + offset; dep < t0 + 2400; dep += 600) {
+        const pts: { s: number; depart: number; stop: boolean; station: number | null }[] = [];
+        const first = head(n - 1);
+        // 大阪梅田（頭端式）が始発の対向列車は、車止めの先から入らず梅田の番線に止まった状態から出る
+        if (R.stations[n - 1].name !== '大阪梅田') pts.push({ s: Math.round(R.extent.to + 600), depart: dep - Math.round((R.extent.to + 600 - first) / 25), stop: false, station: null });
+        for (let j = 0; j < n; j++) {
+          const e = tt[j], i = n - 1 - j, stop = svc === 'local' || C.services!.find(v => v.id === svc)!.stops.includes(j);
+          pts.push({ s: Math.round(head(i)), depart: dep + (e?.dep ?? e?.arr ?? 0), stop: stop && j < n - 1 ? true : stop, station: i });
+        }
+        const last = pts[pts.length - 1];
+        // 大阪梅田が終着の対向列車は梅田で止まったまま 3分後に消える（車止めの先へ走らせない）
+        if (R.stations[0].name === '大阪梅田') last.depart += 180;
+        else pts.push({ s: -900, depart: last.depart + 25 + Math.round((last.s + 900) / 25), stop: false, station: null });
+        list.push({ id: `${code}${dep}`, code, points: pts });
+      }
+    }
+    oncoming[rid][tod] = list.sort((a, b) => a.points[0].depart - b.points[0].depart);
+  }
+}
+writeFileSync('src/data/hankyu-oncoming.json', JSON.stringify({ source: 'ゲーム用の規則（日中10分間隔の普通・特急）。走行時間は scripts/timetable-hankyu.ts の自動運転', routes: oncoming }));
+console.log('対向列車', Object.entries(oncoming).map(([k, v]) => `${k} ${v.noon.length}本`).join(' / '));

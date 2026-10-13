@@ -105,6 +105,21 @@ for (const [id, a, b, pre] of [['EAST', '大阪梅田', '西宮北口', 180], ['
   const course = id === 'EAST' ? 'hankyu-kobe-east' : 'hankyu-kobe-west';
   // OSM から建物・道路まで取得済みのデータ（npm run osm:scenery）があれば上書きしない
   const cur = existsSync(`src/data/osm/${course}.json`) ? JSON.parse(readFileSync(`src/data/osm/${course}.json`, 'utf8')) : null;
+  if (cur?.buildings?.length) {
+    // OSM の水面のうち、線路方向に 1000m を超えるもの（猪名川と藻川に挟まれた中洲（園田）まで含めた多角形。内側の穴が写されていない）を外し、
+    // その範囲の川は中心線に幅を与えた水面で置き換える（ユーザー指摘 2026-10-13「園田の手前の地面が水色で家が浮いている」）
+    const span = (pts: number[]) => { let a = Infinity, z = -Infinity; for (let i = 0; i < pts.length; i += 2) { a = Math.min(a, pts[i]); z = Math.max(z, pts[i]); } return [a, z]; };
+    const bad = (cur.areas as [string, number[]][]).filter(([t, pts]) => t === 'water' && (([a, z]) => z - a > 1000)(span(pts)));
+    if (bad.length) {
+      cur.areas = (cur.areas as [string, number[]][]).filter(x => !bad.includes(x));
+      for (const [, pts] of bad) {
+        const [a, z] = span(pts);
+        cur.areas.push(...x.water.filter(([, wp]) => (([p, q]) => q > a && p < z)(span(wp))));
+      }
+      writeFileSync(`src/data/osm/${course}.json`, JSON.stringify(cur));
+      console.log(`${course}: 大きすぎる水面 ${bad.length} を川の中心線の水面に置き換え`);
+    }
+  }
   if (!cur?.buildings?.length) writeFileSync(`src/data/osm/${course}.json`, JSON.stringify({ source: '© OpenStreetMap contributors（ODbL 1.0）の川の中心線に幅を与えた手作りの水面（建物・道路なし）', course, range: 320, fetched: '2026-10-13', buildings: [], roads: [], highways: [], areas: x.water, landmarks: [] }));
   console.log(`${a}〜${b}: 線形 ${x.segs.length}、勾配 ${x.gradients.length}、構造物 ${x.structures.length}、川 ${x.rivers.length}`);
 }

@@ -412,6 +412,8 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   }
 
   const timed = createTimetableOncoming(ctx, (code, k, towardNamba) => {
+    // 阪急神戸線: 2000系 8両。行先は対向列車の向きの終点（下りのコースでは大阪梅田行き、上りのコースでは新開地行き）
+    if (route.lineId === 'hankyu-kobe') return { kind: 'hankyu-2000', cars: 8, units: [8], label: code === 'L' ? '普通' : '特急', dest: route.id.endsWith('-up') ? '新開地' : '大阪梅田' };
     const { id, ...spec } = realConsist(code, k, towardNamba);
     // 泉佐野以南のコースでは、和歌山方面の普通は実際のダイヤどおり和歌山市行き（既存コースの羽倉崎行きは変えない）
     const south = route.id.startsWith('izumisano-misaki') || route.id.startsWith('misaki-wakayamako');

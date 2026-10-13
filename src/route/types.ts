@@ -66,6 +66,8 @@ export interface Station {
   headEnd?: boolean;
   /** 屋内式の駅（岸和田）: ホーム全体を屋根と壁で覆い、ホームに入ると外が見えない（駅の前後の開口部だけ）。world が室内として描き、環境光・音をトンネル同様に扱う */
   indoor?: boolean;
+  /** 屋内式の駅の建物の横の範囲 [左, 右]（線路の横位置）。未指定は route.tracks の外 3.3m（大阪梅田は9線を覆う） */
+  indoorSpan?: [number, number];
   /** 相対式2面2線で上下のホームを前後にずらす駅（踏切を挟んだ対面ホーム）。対向線側のホームは platform から s 方向へこの距離だけずれる（上下とも同じ符号） */
   platformOpp?: number;
 }

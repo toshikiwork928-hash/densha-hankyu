@@ -27,7 +27,7 @@ export function hallBox(ctx: GameContext, sta: Station): HallBox {
   const lo = Math.min(...ctx.route.tracks), hi = Math.max(...ctx.route.tracks), lp = sta.loop?.lat ?? 0;
   return {
     from: sta.platform.from - 10, to: sta.platform.to + 50,
-    left: Math.min(lo, lo + lp, hi - lp) - 3.3, right: Math.max(hi, hi - lp, lo + lp) + 3.3,
+    left: sta.indoorSpan?.[0] ?? Math.min(lo, lo + lp, hi - lp) - 3.3, right: sta.indoorSpan?.[1] ?? Math.max(hi, hi - lp, lo + lp) + 3.3,
   };
 }
 

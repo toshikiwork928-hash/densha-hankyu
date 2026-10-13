@@ -194,8 +194,29 @@ async function fetchJr(): Promise<OsmEl[]> {
   return [];
 }
 
+/** 目印の建物（OSM の名前で取る。way は外形、node は点）。別のキャッシュ（<chain>.lm.raw.json） */
+const LANDMARK_NAMES = ['梅田スカイビル', 'HEP FIVE', 'グランフロント大阪', 'ヨドバシ梅田', '阪急三番街', '大阪梅田ツインタワーズ', '阪急西宮ガーデンズ', '王子動物園', '神戸三宮阪急ビル',
+  'ANAクラウンプラザホテル神戸', '神戸市立王子スタジアム', '甲南大学', '神戸大学', '西宮神社', 'ザ・ファインタワー梅田豊崎', '園田競馬場', 'あまがさきキューズモール', '夙川公園', '芦屋川', '布引の滝', '新神戸'];
+async function fetchLandmarks(): Promise<OsmEl[]> {
+  const f = `${cacheDir}/${chain.id}.lm.raw.json`;
+  if (existsSync(f)) return JSON.parse(readFileSync(f, 'utf8')).elements;
+  if (offline) return [];
+  const re = LANDMARK_NAMES.join('|'); // 名前に正規表現の記号は無い
+  const q = `[out:json][timeout:90];(way["name"~"^(${re})"](${chain.bbox.join(',')});relation["name"~"^(${re})"](${chain.bbox.join(',')});node["name"~"^(${re})"](${chain.bbox.join(',')}););out tags center bb;`;
+  for (let round = 0; round < 6; round++) for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
+    try {
+      const text = await (await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-hankyu route builder (personal, non-commercial)' } })).text();
+      if (text.startsWith('{')) { writeFileSync(f, text); return JSON.parse(text).elements; }
+      console.log('目印の取得を再試行', url);
+    } catch { /* 次へ */ }
+    await sleep(20000);
+  }
+  return [];
+}
+
 async function main() {
   const els = await fetchRaw();
+  const lmEls = chain.id === 'hankyu-kobe' ? await fetchLandmarks() : [];
   const jrEls = chain.id === 'hankyu-kobe' ? await fetchJr() : [];
   // 線路の点（側線・渡り線・車庫線は除く）
   const rails = els.filter(e => e.type === 'way' && e.tags?.railway === 'rail' && !e.tags.service && e.geometry && !/JR|東海道|山陽/.test(e.tags.name ?? ''));
@@ -342,6 +363,20 @@ async function main() {
     }
   }
   rivers.sort((p, q) => p.s - q.s);
+  // 目印の建物の位置（中心）と外形の大きさ（bounds）をコースの座標へ
+  const landmarks: { name: string; s: number; lat: number; w: number; d: number; tags: Record<string, string> }[] = [];
+  for (const e of lmEls) {
+    const c = (e as unknown as { center?: { lat: number; lon: number } }).center ?? (e.lat != null ? { lat: e.lat, lon: e.lon! } : null);
+    if (!c) continue;
+    const p = xy(c.lat, c.lon), pr = project(line, cum, p);
+    if (pr.d > 2500) continue;
+    const i = Math.min(line.length - 2, Math.floor(pr.c / 10)), dx = line[i + 1][0] - line[i][0], dy = line[i + 1][1] - line[i][1];
+    const left = dx * (p[1] - line[i][1]) - dy * (p[0] - line[i][0]) > 0;
+    const bb = (e as unknown as { bounds?: { minlat: number; minlon: number; maxlat: number; maxlon: number } }).bounds;
+    const w = bb ? Math.round((bb.maxlon - bb.minlon) * KX) : 0, d = bb ? Math.round((bb.maxlat - bb.minlat) * KY) : 0;
+    landmarks.push({ name: e.tags!.name, s: Math.round(toGame(pr.c)), lat: Math.round(left ? -pr.d : pr.d), w, d, tags: Object.fromEntries(Object.entries(e.tags!).filter(([k]) => /^(building|height|building:levels|tourism|leisure|amenity|attraction)$/.test(k))) });
+  }
+  console.log('目印:', landmarks.map(x => `${x.name} s=${x.s} lat=${x.lat} ${x.w}x${x.d}`).join(' | '));
   // 並走する JR の線路の横位置: 50m ごとに、線路から 80m 以内の JR の点の横位置の平均（上下線の中心）。点が無い所は出さない
   const jr: [number, number][] = [];
   {
@@ -431,7 +466,7 @@ async function main() {
     chain: chain.id, generated: new Date().toISOString().slice(0, 10),
     note: 's は起点駅（0）からの営業キロ [m]。駅の stopS は s + 開始位置の規約（180）を路線データ側で足す。標高 z は泉佐野の地面からの差（地面。高架・築堤の高さは含まない）。',
     stations: chain.stations.map((s, i) => ({ name: s.name, s: Math.round(stS[i]), osmLatLon: inv(stPt[i]), groundZ: profile[Math.round(stS[i] / step)]?.z })),
-    segments, structures, rivers, riverLines, jr, gradients, profile, relief,
+    segments, structures, rivers, riverLines, jr, landmarks, gradients, profile, relief,
     diagnostics: { osmLengthM: Math.round(osmLen), arcs: segments.filter(g => g.type === 'arc').length, minRadiusM: Math.round(minRadius), maxDeviationM: Math.round(maxDev) },
   };
   mkdirSync('src/data/geometry', { recursive: true });

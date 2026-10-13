@@ -51,6 +51,8 @@ function slice(first: string, last: string, PRE: number, TAIL: number) {
   // 川の水面（手作りの水面データ。OSM の川の中心線に幅を与えた帯）。大きな川は橋の長さの 6 割、ほかは川 12m・水路 8m・小川 4m
   const BIG = /^(淀川|神崎川|猪名川|旧猪名川|藻川|武庫川)$/;
   const water: [string, number[]][] = [];
+  /** 名前のある川（waterway=river）の水面（OSM の水面が無い所を補う） */
+  const namedWater: number[][] = [];
   for (const rl of data.riverLines) {
     let w = rl.type === 'river' ? 12 : rl.type === 'canal' ? 8 : 4;
     if (BIG.test(rl.name)) {
@@ -71,9 +73,12 @@ function slice(first: string, last: string, PRE: number, TAIL: number) {
     }
     // R は unshift で点の順が逆（[s, lat] の組は保つ）
     water.push(['water', [...L, ...R]]);
+    if (rl.type === 'river' && rl.name) namedWater.push([...L, ...R]);
   }
   const jr = data.jr.filter(([q]) => q > cut && q < end + TAIL).map(([q, l]) => [q - cut, l]);
-  return { jr, water, segs, total, gradients, structures, rivers, relief, ground, distances, pre: PRE, tail: TAIL };
+  // 堤に桜・松を植える川の中心線（world/hankyu-landmarks.ts）
+  const riverPaths = data.riverLines.filter(rl => /^(夙川|芦屋川)$/.test(rl.name)).map(rl => ({ name: rl.name, pts: rl.pts.map((v, i) => i % 2 ? v : Math.round((v - cut) * 10) / 10) }));
+  return { riverPaths, jr, water, namedWater, segs, total, gradients, structures, rivers, relief, ground, distances, pre: PRE, tail: TAIL };
 }
 
 const lit = (x: unknown) => JSON.stringify(x);
@@ -96,16 +101,20 @@ const out: string[] = [
   '  pre: number; tail: number;',
   '  /** 並走する JR の線路群の中心の横位置 [s, lat]（50m ごと。OSM の点の平均） */',
   '  jr: [number, number][];',
+  '  /** 堤に木を植える川の中心線（s, lat の並び） */',
+  '  riverPaths: { name: string; pts: number[] }[];',
   '}',
 ];
 // 大阪梅田は頭端式なので手前 180m（ゲームの規約）。西宮北口は待避線の分岐器が入るよう手前 500m。終点の先は待避線・分岐器が収まる 400m
 for (const [id, a, b, pre] of [['EAST', '大阪梅田', '西宮北口', 180], ['WEST', '西宮北口', '神戸三宮', 500]] as const) {
   const x = slice(a, b, pre, 400);
-  out.push('', `/** ${a}〜${b}。総延長（TAIL を除く）${x.total.toFixed(1)}m */`, `export const HK_${id}: HankyuSection = ${lit({ segments: x.segs, gradients: x.gradients, structures: x.structures, rivers: x.rivers, relief: x.relief, ground: x.ground, distances: x.distances, pre: x.pre, tail: x.tail, jr: x.jr })};`);
+  out.push('', `/** ${a}〜${b}。総延長（TAIL を除く）${x.total.toFixed(1)}m */`, `export const HK_${id}: HankyuSection = ${lit({ segments: x.segs, gradients: x.gradients, structures: x.structures, rivers: x.rivers, relief: x.relief, ground: x.ground, distances: x.distances, pre: x.pre, tail: x.tail, jr: x.jr, riverPaths: x.riverPaths })};`);
   const course = id === 'EAST' ? 'hankyu-kobe-east' : 'hankyu-kobe-west';
   // OSM から建物・道路まで取得済みのデータ（npm run osm:scenery）があれば上書きしない
   const cur = existsSync(`src/data/osm/${course}.json`) ? JSON.parse(readFileSync(`src/data/osm/${course}.json`, 'utf8')) : null;
-  if (cur?.buildings?.length) {
+  // 水面の手直しは osm:scenery が書いた直後のデータに1回だけ行う（cur.waterFixed）。やり直すときは npm run osm:scenery -- --course=… --offline から
+  if (cur?.buildings?.length && !cur.waterFixed) {
+    cur.waterFixed = true;
     // OSM の水面のうち、線路方向に 1000m を超えるもの（猪名川と藻川に挟まれた中洲（園田）まで含めた多角形。内側の穴が写されていない）を外し、
     // その範囲の川は中心線に幅を与えた水面で置き換える（ユーザー指摘 2026-10-13「園田の手前の地面が水色で家が浮いている」）
     const span = (pts: number[]) => { let a = Infinity, z = -Infinity; for (let i = 0; i < pts.length; i += 2) { a = Math.min(a, pts[i]); z = Math.max(z, pts[i]); } return [a, z]; };
@@ -119,6 +128,19 @@ for (const [id, a, b, pre] of [['EAST', '大阪梅田', '西宮北口', 180], ['
       writeFileSync(`src/data/osm/${course}.json`, JSON.stringify(cur));
       console.log(`${course}: 大きすぎる水面 ${bad.length} を川の中心線の水面に置き換え`);
     }
+    // 名前のある川が線路を渡る所（線路から ±40m）に OSM の水面が無ければ、川の中心線の水面で補う（夙川・芦屋川・石屋川など。OSM に川幅の水面が無い）
+    const box = (pts: number[]) => { let a = Infinity, z = -Infinity, l = Infinity, r = -Infinity; for (let i = 0; i < pts.length; i += 2) { a = Math.min(a, pts[i]); z = Math.max(z, pts[i]); l = Math.min(l, pts[i + 1]); r = Math.max(r, pts[i + 1]); } return { a, z, l, r }; };
+    const osmW = (cur.areas as [string, number[]][]).filter(([t]) => t === 'water').map(([, p]) => box(p));
+    let added = 0;
+    for (const wp of x.namedWater) {
+      const b = box(wp);
+      if (osmW.some(o => o.z > b.a - 10 && o.a < b.z + 10 && o.r > -40 && o.l < 44)) continue;
+      // 線路の橋（OSM の bridge）の下を通る川だけ（神戸側は暗渠の川が多い）
+      const near: number[] = []; for (let i = 0; i < wp.length; i += 2) if (Math.abs(wp[i + 1] - 2) < 20) near.push(wp[i]);
+      if (!near.length || !x.structures.some(st => st.kind === 'bridge' && Math.max(...near) > st.from - 5 && Math.min(...near) < st.to + 5)) continue;
+      cur.areas.push(['water', wp]); osmW.push(b); added++;
+    }
+    writeFileSync(`src/data/osm/${course}.json`, JSON.stringify(cur)); console.log(`${course}: 川の水面を ${added} 補った`);
   }
   if (!cur?.buildings?.length) writeFileSync(`src/data/osm/${course}.json`, JSON.stringify({ source: '© OpenStreetMap contributors（ODbL 1.0）の川の中心線に幅を与えた手作りの水面（建物・道路なし）', course, range: 320, fetched: '2026-10-13', buildings: [], roads: [], highways: [], areas: x.water, landmarks: [] }));
   console.log(`${a}〜${b}: 線形 ${x.segs.length}、勾配 ${x.gradients.length}、構造物 ${x.structures.length}、川 ${x.rivers.length}`);

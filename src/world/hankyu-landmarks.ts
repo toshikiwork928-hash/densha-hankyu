@@ -9,12 +9,13 @@ import type { GameContext } from '../core/context';
 import { GeoBatch, P, M, onLight } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
+import { HK_WEST } from '../route/routes/hankyu-kobe-geometry';
 
 type Item =
   | { kind: 'tower'; s: number; lat: number; w: number; d: number; h: number; color: number; band?: number; y0?: number; legs?: [number, number] }
   | { kind: 'wheel'; s: number; lat: number; base: number; r: number; color: number; baseW?: number; baseColor?: number }
   | { kind: 'sky'; s: number; lat: number }
-  | { kind: 'trees'; s: number; lat0: number; lat1: number; gap: number };
+  | { kind: 'trees'; river: string; gap: number; bank: number };
 
 const ITEMS: Record<string, Item[]> = {
   'hankyu-kobe-east': [
@@ -30,9 +31,9 @@ const ITEMS: Record<string, Item[]> = {
     { kind: 'sky', s: 1110, lat: -560 },
   ],
   'hankyu-kobe-west': [
-    // 夙川（s 約3177）・芦屋川（s 約5864）の堤の桜と松。川は線路と直角として並べる（実際の角度は概形）
-    { kind: 'trees', s: 3177, lat0: -320, lat1: 320, gap: 9 },
-    { kind: 'trees', s: 5864, lat0: -320, lat1: 320, gap: 9 },
+    // 夙川・芦屋川の堤の桜と松（OSM の川の中心線から両岸へ bank [m]）
+    { kind: 'trees', river: '夙川', gap: 9, bank: 14 },
+    { kind: 'trees', river: '芦屋川', gap: 9, bank: 16 },
     // 王子動物園（OSM: s 14282・lat 102）の観覧車
     { kind: 'wheel', s: 14250, lat: 150, base: 2, r: 12, color: 0x3a7cc4 },
     // ANAクラウンプラザホテル神戸（新神戸。OSM の新神戸駅前から s 16040・lat 860）
@@ -120,14 +121,22 @@ export function buildHankyuLandmarks(ctx: GameContext): void {
       b.add('m', P.cyl, M(m.x, m.y + H - 6, m.z, 0, 46, 13, 46), 0x8e9aa4); // 円形の吹き抜け
       b.add('m', P.box, M(m.x, m.y + 40, m.z, ry, 6, 3, 54), 0x9aa6b0); // 中層の渡り廊下
     } else {
-      // 堤の桜（春の色ではなく、通年で見分けやすい淡い色）と松
-      const ry = yaw(it.s);
-      for (const bank of [-14, 14]) for (let lat = it.lat0; lat <= it.lat1; lat += it.gap) {
-        if (Math.abs(lat - 2) < 16) continue;
-        const sk = it.s + bank + ((lat * 7.3) % 3), p = at(sk, lat), pine = Math.abs(Math.round(lat / it.gap)) % 3 === 0;
-        const h = pine ? 7 : 5, r = pine ? 2.6 : 3.4;
-        b.add('m', P.boxB, M(p.x, p.y, p.z, ry, .4, h, .4), 0x5b4636);
-        b.add('m', pine ? P.cone4 : P.sphere, M(p.x, p.y + h - (pine ? 1 : 0), p.z, ry, r * 2, pine ? 4.5 : r * 1.6, r * 2), pine ? 0x3f6b3a : 0xe9b9c6);
+      // 堤の桜（淡い色）と松。川の中心線（s, lat）を等間隔にたどり、法線方向の両岸へ置く。線路の近く（±16m）は置かない
+      for (const rp of HK_WEST.riverPaths.filter(r => r.name === it.river)) {
+        const Q = rp.pts;
+        for (let i = 0; i + 3 < Q.length; i += 2) {
+          const s0 = Q[i], l0 = Q[i + 1], s1 = Q[i + 2], l1 = Q[i + 3], len = Math.hypot(s1 - s0, l1 - l0), n = Math.max(1, Math.floor(len / it.gap));
+          for (let k = 0; k < n; k++) {
+            const t = k / n, sc = s0 + (s1 - s0) * t, lc = l0 + (l1 - l0) * t, ns = -(l1 - l0) / len, nl = (s1 - s0) / len;
+            for (const sd of [-1, 1]) {
+              const sk = sc + ns * it.bank * sd, lk = lc + nl * it.bank * sd;
+              if (Math.abs(lk - 2) < 16 || Math.abs(lk) > 330) continue;
+              const p = at(sk, lk), pine = (i / 2 + k) % 3 === 0, h = pine ? 7 : 5, r = pine ? 2.6 : 3.4, ry = yaw(sk);
+              b.add('m', P.boxB, M(p.x, p.y, p.z, ry, .4, h, .4), 0x5b4636);
+              b.add('m', pine ? P.cone4 : P.sphere, M(p.x, p.y + h - (pine ? 1 : 0), p.z, ry, r * 2, pine ? 4.5 : r * 1.6, r * 2), pine ? 0x3f6b3a : 0xe9b9c6);
+            }
+          }
+        }
       }
     }
   }

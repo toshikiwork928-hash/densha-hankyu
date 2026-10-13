@@ -49,9 +49,9 @@ const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水
   { id: 'kishiwada-izumisano', base: izumisano, load: async () => (await import('../data/osm/kishiwada-izumisano.json')).default as unknown as OsmData },
   // みさき公園〜和歌山港: OSM の水面データが無いので、紀ノ川橋梁の下の水面を手で作ったデータ（建物・道路は無い。街並みは手続き生成）
   { id: 'misaki-wakayamako', base: misakiWakayamako, load: async () => (await import('../data/osm/misaki-wakayamako.json')).default as unknown as OsmData },
-  // 阪急神戸線: 梅田〜西宮北口は OSM の建物・道路・水面（npm run osm:scenery -- --course=hankyu-kobe-east）。西宮北口〜三宮は取得できるまで川の中心線に幅を与えた手作りの水面だけ（scripts/slice-hankyu-geometry.ts）
+  // 阪急神戸線: OSM の建物・道路・水面（npm run osm:scenery -- --course=hankyu-kobe-east / hankyu-kobe-west）。線路方向に長すぎる水面は scripts/slice-hankyu-geometry.ts が川の中心線の水面に置き換える
   { id: 'hankyu-kobe-east', base: hankyuKobeEast, load: async () => (await import('../data/osm/hankyu-kobe-east.json')).default as unknown as OsmData },
-  { id: 'hankyu-kobe-west', base: hankyuKobeWest, waterOnly: true, load: async () => (await import('../data/osm/hankyu-kobe-west.json')).default as unknown as OsmData },
+  { id: 'hankyu-kobe-west', base: hankyuKobeWest, load: async () => (await import('../data/osm/hankyu-kobe-west.json')).default as unknown as OsmData },
   { id: 'izumisano-misaki', base: izumisanoMisaki, load: async () => (await import('../data/osm/izumisano-misaki.json')).default as unknown as OsmData },
 ];
 

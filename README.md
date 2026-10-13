@@ -31,4 +31,4 @@ npm run dev   # http://localhost:8780
 
 ## 公開可否
 
-未定。公開する場合は南海版と別の公開用リポジトリにする予定。出典表示「© OpenStreetMap contributors（ODbL）」を README に書く。
+公開。GitHub Pages: https://toshikiwork928-hash.github.io/densha-hankyu/ （公開用リポジトリ `toshikiwork928-hash/densha-hankyu` の main に、このフォルダの中身をルートとして置く。`.github/workflows/pages.yml` は公開側だけにある）。出典表示「© OpenStreetMap contributors（ODbL）」。

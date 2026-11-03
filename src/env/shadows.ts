@@ -51,7 +51,9 @@ export function createShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
       enabled = en;
       if (ib !== budget) { budget = ib; this.tagScene(true); }
       renderer.shadowMap.enabled = en;
-      renderer.shadowMap.type = ms >= 2048 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+      // three r186 で PCFSoftShadowMap が廃止された。PCFShadowMap に統一し、高画質（2048 以上）は影の縁をぼかす半径で柔らかさを出す
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+      sun.shadow.radius = ms >= 2048 ? 3 : 1;
       sun.castShadow = en;
       if (ms && ms !== size) {
         size = ms; sun.shadow.mapSize.set(ms, ms);

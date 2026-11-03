@@ -76,7 +76,9 @@ world.loadAssets()
   .catch((e: unknown) => { console.error(e); return -1; })
   .then(failed => { ctx.assetsReady = true; ctx.events.emit('assetsReady', { failed: Math.max(0, failed) }); });
 
-const clock = new THREE.Clock();
+// 描画ループの時計（three r183 で Clock は非推奨。Timer はタブが隠れている間の経過を数えない）
+const clock = new THREE.Timer();
+clock.connect(document);
 /** 描画系の時刻 [s]。一時停止中は進めない（踏切の点滅・揺れ・雲なども止める） */
 let viewTime = 0;
 let inspectScene: (() => void) | undefined;
@@ -90,6 +92,7 @@ function step(dt: number, time: number) {
 }
 function loop() {
   if (recovery.failed) return;
+  clock.update();
   const real = Math.min(MAX_DT, clock.getDelta());
   const dt = ctx.state.paused ? 0 : real;
   viewTime += dt;

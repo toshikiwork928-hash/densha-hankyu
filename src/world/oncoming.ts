@@ -12,7 +12,6 @@ import type { GameContext } from '../core/context';
 import type { OncomingSpec, ServiceId, Station, TimeOfDay, TrainKind } from '../route/types';
 import { carLenOf, customPlatformSide, islandOffset, loopShape, loopZone, sameClass, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
 import { classOfSpec, hourlyOf, planOncoming, runClasses, runConsist, rushStopScenes, tokkyuOrder, type TrainClass } from '../route/oncoming-stops';
-import MEETS from '../data/oncoming-meets.json';
 import { counterTimetable, createTimetableOncoming } from './oncoming-timetable';
 import { onLight } from './batch';
 import { placeCar } from './emu';
@@ -427,7 +426,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     const tod = ctx.envState.timeOfDay;
     const towardNamba = serviceOf(route, 'local')?.destination === 'なんば'; // 対向列車は逆向き
     // 実際のダイヤのすれ違いリストがあるコースは、それどおりに出す
-    const real = (MEETS.meets as unknown as Record<string, Record<string, Record<string, [number, string, number][]>>>)[route.id]?.[ctx.service?.id ?? '']?.[tod];
+    const real = undefined as [number, string, number][] | undefined; // 南海の実ダイヤのすれ違いリスト（oncoming-meets.json）は阪急版では使わない
     trains.splice(0, trains.length, ...(real ? realTrains(real, tod, towardNamba) : baseTrains));
     if (real) return;
     const level = route.lineId !== 'shiokaze' ? (RUSH_TIMES.has(tod) ? 2 : 0)

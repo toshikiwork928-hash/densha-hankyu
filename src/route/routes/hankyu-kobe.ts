@@ -5,7 +5,9 @@
 // 駅の高架・地上の別とホームの形式は Wikipedia の各駅の記事「駅構造」（2026-10-13 閲覧）。配線略図との照合と、頭端式・2面3線・3面4線などの細部は未実施（概形で近似）。
 // 種別と停車駅（Wikipedia「阪急神戸本線」運行形態、2025年2月22日改正の報道。2026-10-13 閲覧）:
 //   普通 = 全駅。特急 = 大阪梅田・十三・西宮北口・夙川・岡本・神戸三宮（終日）。通勤特急（平日朝）= 特急 + 塚口。準特急（平日夕・夜）= 特急 + 塚口・六甲。
-//   急行・快速・準急は、停車駅の一覧が確かめられないので入れない。行先は下り 新開地（神戸高速線へ直通）、上り 大阪梅田。
+//   快速（平日朝 梅田行き・夕 三宮行き）= 大阪梅田・十三・武庫之荘・西宮北口から先の各駅（2025年2月改正の報道、路線図サイト。2026-11-03 閲覧）。梅田〜西宮北口だけに入れる。
+//   入れない種別: 急行（梅田〜西宮北口は通勤特急、西宮北口〜三宮は普通と停車駅が同じ）、準急（今津線から来て西宮北口を通過するので、このコースの始発・終点に止まらない）。
+//   西宮北口〜三宮の快速は普通と停車駅が同じなので入れない。行先は下り 新開地（神戸高速線へ直通）、上り 大阪梅田。
 //   選べる種別は、そのコースで停車駅が普通と違うものだけ（梅田〜西宮北口は 普通・特急・通勤特急、西宮北口〜三宮は 普通・特急・準特急）。
 // 時刻表は自動運転の最速走行 +5%（npm run timetable:hankyu。scripts/timetable-hankyu.ts）。停車 25 秒はゲーム用。
 import type { ExtraTrack, Route, Sign, SpeedLimit, Station, StationIsland, StationLoop, StationStructure } from '../types';
@@ -97,7 +99,9 @@ const STRUCT: Record<string, StationStructure> = {
 /** [id, 名前, 停車駅（null = 全駅）] */
 type Svc = [ServiceId, string, string[] | null];
 const TOKKYU = ['大阪梅田', '十三', '西宮北口', '夙川', '岡本', '神戸三宮'];
-const SVC_EAST: Svc[] = [['local', '普通', null], ['limited', '特急', TOKKYU], ['express', '通勤特急', [...TOKKYU, '塚口']]];
+// 快速の id は 'airport'（ServiceId の空きを使う。南海の空港急行とは無関係。格は急行）
+const SVC_EAST: Svc[] = [['local', '普通', null], ['limited', '特急', TOKKYU], ['express', '通勤特急', [...TOKKYU, '塚口']],
+  ['airport', '快速', ['大阪梅田', '十三', '武庫之荘', '西宮北口']]];
 const SVC_WEST: Svc[] = [['local', '普通', null], ['limited', '特急', TOKKYU], ['express', '準特急', [...TOKKYU, '塚口', '六甲']]];
 
 function build(id: string, name: string, sec: HankyuSection, list: Sta[], svcs: Svc[], headStart: boolean, extra: { viaducts?: [number, number][]; limits?: SpeedLimit[]; extraTracks?: ExtraTrack[] } = {}): Route {
@@ -156,7 +160,7 @@ function build(id: string, name: string, sec: HankyuSection, list: Sta[], svcs: 
         destination: '新開地', destinationKana: 'しんかいち' })),
     ],
     // 先行の普通: 途中に待避が無い（特急は普通を西宮北口で追い越す）ので、優等列車が追いつかない間隔で先に出す（日中は10分間隔。ゲーム用）
-    precedingHeadway: { limited: 600, express: 600 },
+    precedingHeadway: { limited: 600, express: 600, airport: 600 },
     prevName: '', nextName: '', signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
     extent: { from: -400, to: end }, tracks: [0, 4],
     // 沿線は全線が市街地（大阪・尼崎・西宮・芦屋・神戸）。OSM の建物のある所はそれを置き、無い所は手続き生成の市街地で埋める
@@ -235,11 +239,11 @@ export const hankyuKobeEast = build('hankyu-kobe-east', '阪急神戸線 大阪�
   r.trackProfiles = { 0: [[0, UMEDA.A], [U_OUT, UMEDA.A], [U_IN, 0]], 4: [[0, UMEDA.B], [U_OUT, UMEDA.B], [U_IN, 4]] };
   Object.assign(ts, { layout: 'custom', customPlatforms: [{ kind: 'side', lat: 0, side: 'L' }, { kind: 'island', lat: (4 + ITAMI) / 2, width: ITAMI - 4 - 3.4 }] });
   // 梅田の駅（ターミナルビル）と車庫の敷地には建物を置かない
-  r.reserved = [{ from: -300, to: umedaStop + 60, lat0: -15, lat1: 95 }, { from: nishiE - 960, to: nishiE - 240, lat0: 18, lat1: 85 }, ...branchReserved(nishiE)];
+  r.reserved = [{ from: -300, to: umedaStop + 60, lat0: -15, lat1: 95 }, { from: -130, to: -30, lat0: -275, lat1: -185 } /* 大阪梅田ツインタワーズ・ノース（目印）の敷地 */, { from: nishiE - 960, to: nishiE - 240, lat0: 18, lat1: 85 }, ...branchReserved(nishiE)];
 }
 const upTT = (r: Route) => Object.fromEntries((r.services ?? []).map(v => [v.id, HKT[`${r.id}-up`]?.[v.id] ?? roughTimetable(r.stations.map(st => -st.stopS).reverse())]));
 export const hankyuKobeEastUp = reverseRoute(hankyuKobeEast, { id: 'hankyu-kobe-east-up', name: '阪急神戸線 西宮北口 → 大阪梅田', timetable: upTT(hankyuKobeEast), signs: approachSigns });
-// 御影の東の S字は 90km/h 制限（Wikipedia）。位置は不明のため、岡本〜御影の住吉川の前後に仮置き
+// 御影の東の S字は 90km/h 制限（Wikipedia）。線形（OSM の中心線）では御影の手前約750〜190m に右（半径約900m）→ 左（約870m）の反向曲線があり、これを S字とする
 const mikage = HK_WEST.pre + HK_WEST.distances['御影'];
 // 王子公園の先〜神戸三宮で左（南側）に JR 神戸線（東海道線）の複々線が並ぶ。描画だけの線路（JR の列車は走らせない。ユーザー指示）。
 // 横位置は OSM の JR の線路の点の平均（HK_WEST.jr）を 5点でならし、阪急の線路・島式ホームにかからないよう中心を -15m より外にする
@@ -252,7 +256,7 @@ const jrTracks: ExtraTrack[] = (() => {
   pts.push([end, pts[pts.length - 1][1]]);
   return [-6, -2, 2, 6].map((d, k) => ({ id: `jr-${k}`, from: pts[0][0], to: end, noWire: true, /* 架線柱が隣の JR の線路にかかるので架線は省く（描画だけの線） */ lat: pts.map(([q, l]) => [q, Math.round((l + d) * 10) / 10] as [number, number]) }));
 })();
-export const hankyuKobeWest = build('hankyu-kobe-west', '阪急神戸線 西宮北口 → 神戸三宮', HK_WEST, WEST, SVC_WEST, false, { limits: [{ from: mikage - 1300, to: mikage - 500 + TRAIN_LEN, kmh: 90, label: 'S字 90km/h（位置は仮）' }], extraTracks: [...jrTracks, ...depotTracks(HK_WEST.pre + HK_WEST.distances['西宮北口'], 0)] });
+export const hankyuKobeWest = build('hankyu-kobe-west', '阪急神戸線 西宮北口 → 神戸三宮', HK_WEST, WEST, SVC_WEST, false, { limits: [{ from: mikage - 750, to: mikage - 190 + TRAIN_LEN, kmh: 90, label: 'S字' }], extraTracks: [...jrTracks, ...depotTracks(HK_WEST.pre + HK_WEST.distances['西宮北口'], 0)] });
 {
   const rk = HK_WEST.pre + HK_WEST.distances['六甲'], a0 = rk - 330, a1 = rk - 215, b0 = rk + 50, b1 = rk + 165;
   hankyuKobeWest.trackProfiles = { 0: [[a0, 0], [a1, -ROKKO_OUT], [b0, -ROKKO_OUT], [b1, 0]], 4: [[a0, 4], [a1, 4 + ROKKO_OUT], [b0, 4 + ROKKO_OUT], [b1, 4]] };

@@ -1,6 +1,6 @@
 // 阪急神戸線の沿線の目印（描画だけ）。形は概形で、実在建物の看板・ロゴ・細部は写さない。
 // 位置は OSM（© OpenStreetMap contributors、ODbL）の施設の位置をコースの座標へ写したもの（scripts/route-geometry.ts の landmarks、
-// scripts/osm-scenery.ts の landmarks）。OSM で位置が取れなかったもの（梅田スカイビル・阪急百貨店のタワー）は周辺の OSM の点からの推定で、「推定」と書く。
+// scripts/osm-scenery.ts の landmarks）。OSM で位置が取れなかった梅田スカイビル・大阪梅田ツインタワーズ・ノースは、ウィキデータ・Wikipedia の座標を写した。
 // 高さは公開資料のおおよその値（梅田スカイビル 173m、グランフロント大阪 北館 約174m・南館 約179m、大阪梅田ツインタワーズ・ノース 約187m、
 // HEP FIVE の観覧車 頂上 約106m・直径 約75m、神戸三宮阪急ビル 約120m、ANAクラウンプラザホテル神戸 約163m）。
 // 座標は下り（大阪梅田 → 神戸三宮）の向きで、s = そのコースの距離、lat = 横位置（右が正）。上り（'-up'）では s・lat を反転する。
@@ -15,20 +15,25 @@ type Item =
   | { kind: 'tower'; s: number; lat: number; w: number; d: number; h: number; color: number; band?: number; y0?: number; legs?: [number, number] }
   | { kind: 'wheel'; s: number; lat: number; base: number; r: number; color: number; baseW?: number; baseColor?: number }
   | { kind: 'sky'; s: number; lat: number }
-  | { kind: 'trees'; river: string; gap: number; bank: number };
+  | { kind: 'trees'; river: string; gap: number; bank: number }
+  /** 上を越える高架（山陽新幹線）。angle = 線路の向きから左回りの交差角 [度]（OSM の交点。scripts/route-geometry.ts の crossings） */
+  | { kind: 'overpass'; s: number; angle: number; height: number; width: number; len: number };
 
 const ITEMS: Record<string, Item[]> = {
   'hankyu-kobe-east': [
     // HEP FIVE（OSM: s -127・lat 70）。商業ビルの屋上に赤い観覧車
     { kind: 'wheel', s: -127, lat: 70, base: 34, r: 37, color: 0xd8262c, baseW: 70, baseColor: 0xd9d2c4 },
-    // 大阪梅田ツインタワーズ・ノース（阪急百貨店）。駅の南。位置は推定
-    { kind: 'tower', s: -300, lat: 60, w: 60, d: 55, h: 187, color: 0x9aa6b0, band: 0x6c7a86 },
+    // 大阪梅田ツインタワーズ・ノース（阪急百貨店、約187m）。Wikipedia の座標を、梅田〜中津の線路の向きの延長へ写した位置
+    { kind: 'tower', s: -82, lat: -231, w: 60, d: 55, h: 187, color: 0x9aa6b0, band: 0x6c7a86 },
     // グランフロント大阪（OSM: 南 s 216〜224・lat -414〜-430、北 s 793〜824・lat -330〜-356）
     { kind: 'tower', s: 215, lat: -420, w: 55, d: 45, h: 179, color: 0x8fa2b4, band: 0x5d7488 },
     { kind: 'tower', s: 300, lat: -370, w: 45, d: 40, h: 154, color: 0x9cb0c0, band: 0x5d7488 },
     { kind: 'tower', s: 810, lat: -345, w: 50, d: 45, h: 174, color: 0x8fa2b4, band: 0x5d7488 },
-    // 梅田スカイビル（2棟を最上部の空中庭園でつなぐ）。OSM の駐車場（s 1099・lat -418）の西。位置は推定
-    { kind: 'sky', s: 1110, lat: -560 },
+    // 山陽新幹線の高架（OSM: 十三〜神崎川 s 3231・77°、園田の先 s 7980・123°。コースの s は +180）。高さ・幅は概形
+    { kind: 'overpass', s: 3411, angle: 77, height: 13, width: 11.5, len: 260 },
+    { kind: 'overpass', s: 8160, angle: 123, height: 13, width: 11.5, len: 260 },
+    // 梅田スカイビル（2棟を最上部の空中庭園でつなぐ）。ウィキデータ Q1151808 の座標を写した位置
+    { kind: 'sky', s: 1166, lat: -553 },
   ],
   'hankyu-kobe-west': [
     // 夙川・芦屋川の堤の桜と松（OSM の川の中心線から両岸へ bank [m]）
@@ -109,6 +114,28 @@ export function buildHankyuLandmarks(ctx: GameContext): void {
       }
       // 支柱（A 字）
       for (const sd of [-1, 1]) beam(new THREE.Vector3(c.x + ax * sd * it.r * .55, c.y + it.base, c.z + az * sd * it.r * .55), new THREE.Vector3(c.x, cy, c.z), t * 1.6, 0xb8b4ac);
+    } else if (it.kind === 'overpass') {
+      // 線路の前方 fwd と左 left から、交差の向き dir = cos(a)·fwd + sin(a)·left（上り・下りで同じ線になる）
+      const sc = Math.max(1, Math.min(L - 1, S(it.s))), o = tr.at(sc, Lt(2), 0);
+      const fwd = tr.at(sc + 1, Lt(2), 0).sub(tr.at(sc - 1, Lt(2), 0)).setY(0).normalize();
+      const left = tr.at(sc, Lt(2) - 1, 0).sub(tr.at(sc, Lt(2), 0)).setY(0).normalize();
+      const a = it.angle * Math.PI / 180, dir = fwd.clone().multiplyScalar(Math.cos(a)).addScaledVector(left, Math.sin(a)).normalize();
+      const deckY = Math.max(o.y, T.groundY(sc)) + it.height, ry = Math.atan2(dir.x, dir.z), STEP = 30;
+      const clear = 14 / Math.max(.3, Math.abs(Math.sin(a))); // 阪急の線路の上（交点の前後）には橋脚を立てない
+      for (let t = -it.len / 2; t < it.len / 2; t += STEP) {
+        const m = o.clone().addScaledVector(dir, t + STEP / 2);
+        b.add('m', P.boxB, M(m.x, deckY, m.z, ry, it.width, 1.8, STEP + .05), 0xb7b4ac); // 床版
+        for (const sd of [-1, 1]) {
+          const w = m.clone().add(new THREE.Vector3(dir.z, 0, -dir.x).multiplyScalar(sd * (it.width / 2 - .2)));
+          b.add('m', P.boxB, M(w.x, deckY + 1.8, w.z, ry, .3, 2.2, STEP + .05), 0xc9c6be); // 防音壁
+        }
+        const p = o.clone().addScaledVector(dir, t);
+        if (Math.abs(t) < clear) continue;
+        const gy = T.groundY(sc) - 1;
+        b.add('m', P.boxB, M(p.x, gy, p.z, ry, it.width * .8, deckY - gy, 2.2), 0xa7a49c); // 橋脚
+      }
+      // 交点の前後は桁を厚くする（阪急をまたぐ桁）
+      b.add('m', P.boxB, M(o.x, deckY - 1.6, o.z, ry, it.width * .9, 1.6, clear * 2), 0x9e9b93);
     } else if (it.kind === 'sky') {
       // 梅田スカイビル: 2棟（各 約40×40m、間隔 約54m）を最上部（約150〜173m）の空中庭園でつなぐ。外壁はガラスの銀色
       const ry = yaw(it.s), p0 = at(it.s, it.lat - 27), p1 = at(it.s, it.lat + 27), H = 173;

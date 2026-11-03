@@ -1,6 +1,6 @@
 // 路線データの下書き生成: OSM の線路の中心線と国土地理院の標高から、線形（直線・円弧）・勾配・トンネル・橋の範囲を作る。
 // 出力: src/data/geometry/<chain>.json。路線データ（src/route/routes/*.ts）を書く人が読む材料で、アプリは直接読まない。
-// 実行: npm run geometry:south（ローカルのみ。Overpass と国土地理院の標高 API へ接続する）
+// 実行: npm run geometry:hankyu（ローカルのみ。Overpass と国土地理院の標高 API へ接続する）
 //   --offline  取得済みのキャッシュ（node_modules/.cache/osm/<chain>.raw.json、標高は .elev.json）だけで変換
 // 出典: © OpenStreetMap contributors（ODbL 1.0）、標高は国土地理院（標高API、5mメッシュ（レーザ）等）。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -10,21 +10,7 @@ interface OsmEl { type: string; lat?: number; lon?: number; tags?: Record<string
 interface StationSpec { name: string; osm: string; km: number }
 interface Chain { id: string; bbox: [number, number, number, number]; rail: string; stations: StationSpec[]; /** 同名駅で優先する事業者 */ operator: RegExp }
 
-// 営業キロは南海公式（Wikipedia「南海本線」の駅一覧）の難波起点から泉佐野（34.0km）を引いた値。和歌山港線は和歌山市から2.8km。
 const CHAINS: Record<string, Chain> = {
-  south: {
-    id: 'south',
-    bbox: [34.14, 135.10, 34.42, 135.33],
-    rail: '南海本線|和歌山港線',
-    stations: [
-      { name: '泉佐野', osm: '泉佐野', km: 0 }, { name: '羽倉崎', osm: '羽倉崎', km: 2.1 }, { name: '吉見ノ里', osm: '吉見ノ里', km: 3.4 },
-      { name: '岡田浦', osm: '岡田浦', km: 4.8 }, { name: '樽井', osm: '樽井', km: 6.6 }, { name: '尾崎', osm: '尾崎', km: 9.1 },
-      { name: '鳥取ノ荘', osm: '鳥取ノ荘', km: 10.6 }, { name: '箱作', osm: '箱作', km: 12.6 }, { name: '淡輪', osm: '淡輪', km: 16.2 },
-      { name: 'みさき公園', osm: 'みさき公園', km: 17.9 }, { name: '孝子', osm: '孝子', km: 22.3 }, { name: '和歌山大学前', osm: '和歌山大学前', km: 24.0 },
-      { name: '紀ノ川', osm: '紀ノ川', km: 27.6 }, { name: '和歌山市', osm: '和歌山市', km: 30.2 }, { name: '和歌山港', osm: '和歌山港', km: 33.0 },
-    ],
-    operator: /南海/,
-  },
   // 阪急神戸本線 大阪梅田〜神戸三宮（営業キロは Wikipedia「阪急神戸本線」）
   'hankyu-kobe': {
     id: 'hankyu-kobe',
@@ -38,7 +24,7 @@ const CHAINS: Record<string, Chain> = {
   },
 };
 const args = new Map(process.argv.slice(2).map(a => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? '1']; }));
-const chain = CHAINS[args.get('chain') ?? 'south'];
+const chain = CHAINS[args.get('chain') ?? 'hankyu-kobe'];
 const offline = args.has('offline');
 const cacheDir = 'node_modules/.cache/osm';
 const rawFile = `${cacheDir}/${chain.id}.raw.json`, elevFile = `${cacheDir}/${chain.id}.elev.json`;
@@ -214,9 +200,26 @@ async function fetchLandmarks(): Promise<OsmEl[]> {
   return [];
 }
 
+/** 交差する他の路線（山陽新幹線など）。別のキャッシュ（<chain>.cross.raw.json） */
+async function fetchCrossLines(): Promise<OsmEl[]> {
+  const f = `${cacheDir}/${chain.id}.cross.raw.json`;
+  if (existsSync(f)) return JSON.parse(readFileSync(f, 'utf8')).elements;
+  if (offline) return [];
+  const q = `[out:json][timeout:90];way["railway"="rail"]["name"~"新幹線"](${chain.bbox.join(',')});out tags geom;`;
+  for (let round = 0; round < 6; round++) for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
+    try {
+      const text = await (await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-hankyu route builder (personal, non-commercial)' } })).text();
+      if (text.startsWith('{') && JSON.parse(text).elements?.length) { writeFileSync(f, text); return JSON.parse(text).elements; }
+    } catch { /* 次へ */ }
+    await sleep(15000);
+  }
+  return [];
+}
+
 async function main() {
   const els = await fetchRaw();
-  const lmEls = chain.id === 'hankyu-kobe' ? await fetchLandmarks() : [];
+  const crossEls = chain.id === 'hankyu-kobe' ? await fetchCrossLines() : [];
+  const lmEls = chain.id === 'hankyu-kobe' ? [...await fetchLandmarks()] : [];
   const jrEls = chain.id === 'hankyu-kobe' ? await fetchJr() : [];
   // 線路の点（側線・渡り線・車庫線は除く）
   const rails = els.filter(e => e.type === 'way' && e.tags?.railway === 'rail' && !e.tags.service && e.geometry && !/JR|東海道|山陽/.test(e.tags.name ?? ''));
@@ -226,7 +229,7 @@ async function main() {
   const stPt: V[] = chain.stations.map(s => {
     const c = sts.filter(e => e.tags?.name === s.osm);
     if (!c.length) throw new Error(`駅が無い: ${s.name}`);
-    // 同名が複数なら南海の駅（operator に南海）を優先
+    // 同名が複数なら事業者の一致する駅を優先
     // 事業者の一致を優先し、無ければ線路に最も近いもの（阪神の御影・春日野道など同名駅を除く）
     const near = (e: OsmEl) => { const p = xy(e.lat!, e.lon!); let d = Infinity; for (let i = 0; i < pts.length; i += 3) d = Math.min(d, Math.hypot(pts[i][0] - p[0], pts[i][1] - p[1])); return d; };
     const pick = c.find(e => chain.operator.test(e.tags?.operator ?? '')) ?? [...c].sort((p, q) => near(p) - near(q))[0];
@@ -363,6 +366,12 @@ async function main() {
     }
   }
   rivers.sort((p, q) => p.s - q.s);
+  // 座標を資料から取った目印（OSM で取れなかったもの）。出典: 梅田スカイビル = ウィキデータ Q1151808、大阪梅田ツインタワーズ・ノース = Wikipedia（2026-11-03 閲覧）
+  const FIXED: { name: string; lat: number; lon: number }[] = chain.id === 'hankyu-kobe' ? [
+    { name: '梅田スカイビル', lat: 34.705278, lon: 135.489722 },
+    { name: '大阪梅田ツインタワーズ・ノース', lat: 34.702278, lon: 135.498806 },
+  ] : [];
+  for (const f of FIXED) lmEls.push({ type: 'node', lat: f.lat, lon: f.lon, tags: { name: f.name } });
   // 目印の建物の位置（中心）と外形の大きさ（bounds）をコースの座標へ
   const landmarks: { name: string; s: number; lat: number; w: number; d: number; tags: Record<string, string> }[] = [];
   for (const e of lmEls) {
@@ -377,6 +386,26 @@ async function main() {
     landmarks.push({ name: e.tags!.name, s: Math.round(toGame(pr.c)), lat: Math.round(left ? -pr.d : pr.d), w, d, tags: Object.fromEntries(Object.entries(e.tags!).filter(([k]) => /^(building|height|building:levels|tourism|leisure|amenity|attraction)$/.test(k))) });
   }
   console.log('目印:', landmarks.map(x => `${x.name} s=${x.s} lat=${x.lat} ${x.w}x${x.d}`).join(' | '));
+  // 交差する路線（新幹線）: 線路の中心線と交わる位置と、交わる角度（線路の向きから反時計回り [度]）。上下線の way ごとに出る
+  const crossings: { name: string; s: number; angle: number; layer?: string; bridge?: string }[] = [];
+  for (const w of crossEls.filter(e => e.type === 'way' && e.geometry)) {
+    const g = w.geometry!.map(q => xy(q.lat, q.lon));
+    for (let k = 0; k + 1 < g.length; k++) {
+      const [a, b] = [g[k], g[k + 1]];
+      for (let i = 0; i + 1 < line.length; i++) {
+        const [c, d] = [line[i], line[i + 1]];
+        const den = (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
+        if (!den) continue;
+        const t = ((c[0] - a[0]) * (d[1] - c[1]) - (c[1] - a[1]) * (d[0] - c[0])) / den, u = ((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / den;
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+          let ang = (Math.atan2(b[1] - a[1], b[0] - a[0]) - Math.atan2(d[1] - c[1], d[0] - c[0])) * 180 / Math.PI;
+          ang = ((ang % 180) + 180) % 180;
+          crossings.push({ name: w.tags!.name ?? '', s: Math.round(toGame(cum[i] + u * 10)), angle: Math.round(ang), layer: w.tags!.layer, bridge: w.tags!.bridge });
+        }
+      }
+    }
+  }
+  console.log('交差する路線:', crossings.map(c => `${c.name} s=${c.s} ${c.angle}° layer=${c.layer} bridge=${c.bridge}`).join(' | '));
   // 並走する JR の線路の横位置: 50m ごとに、線路から 80m 以内の JR の点の横位置の平均（上下線の中心）。点が無い所は出さない
   const jr: [number, number][] = [];
   {
@@ -466,7 +495,7 @@ async function main() {
     chain: chain.id, generated: new Date().toISOString().slice(0, 10),
     note: 's は起点駅（0）からの営業キロ [m]。駅の stopS は s + 開始位置の規約（180）を路線データ側で足す。標高 z は泉佐野の地面からの差（地面。高架・築堤の高さは含まない）。',
     stations: chain.stations.map((s, i) => ({ name: s.name, s: Math.round(stS[i]), osmLatLon: inv(stPt[i]), groundZ: profile[Math.round(stS[i] / step)]?.z })),
-    segments, structures, rivers, riverLines, jr, landmarks, gradients, profile, relief,
+    segments, structures, rivers, riverLines, jr, landmarks, crossings, gradients, profile, relief,
     diagnostics: { osmLengthM: Math.round(osmLen), arcs: segments.filter(g => g.type === 'arc').length, minRadiusM: Math.round(minRadius), maxDeviationM: Math.round(maxDev) },
   };
   mkdirSync('src/data/geometry', { recursive: true });

@@ -13,7 +13,6 @@ import { buildIndoorStations } from './indoor-station';
 import { buildCustomStation } from './custom-stations';
 import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
 import { addCanopyRoof, addCanopyBraces, addPlatformWall, architectureOf } from './station-architecture';
-import { isDaigakumae } from '../route/routes/misaki-wakayamako-daigakumae';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -390,7 +389,7 @@ export function buildStations(ctx: GameContext): void {
     // 駅舎の位置（Station.structure）: 下りホーム（左）か上りホーム（右）か、ホームごとか。構成の不明な駅は従来どおり下りホームの中央
     const L1 = Math.max(...ctx.route.tracks), S = sta.structure;
     const fullDown = !S || S.building === 'down' || S.building === 'both', fullUp = !!S && (S.building === 'up' || S.building === 'both');
-    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: isDaigakumae(ctx.route.id, sta.name) || !fullDown });
+    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: !fullDown });
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
     if (L1 > 0) buildStation(ctx, sta, prev, next, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: !fullUp, elevatedDy: dy, shift: sta.platformOpp });
     if (S?.link === 'footbridge' && L1 > 0) buildFootbridge(ctx, sta, [-4.1, L1 + 4.1]);

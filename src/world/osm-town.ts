@@ -18,12 +18,6 @@ import { coastalThirdTracks } from './coastal-stations';
 import { twinTowerZones } from './izumiotsu-towers';
 import type { TreeSpot } from './town-jp';
 import type { Route } from '../route/types';
-import { namba } from '../route/routes/namba';
-import { shiokaze } from '../route/routes/shiokaze';
-import { kishiwada } from '../route/routes/kishiwada';
-import { izumisano } from '../route/routes/izumisano';
-import { misakiWakayamako } from '../route/routes/misaki-wakayamako';
-import { izumisanoMisaki } from '../route/routes/izumisano-misaki';
 import { seaMaskOf, type CoastData } from './coast-field';
 
 export interface OsmData {
@@ -43,16 +37,9 @@ export interface OsmData {
 
 /** データと、その座標のもとになったコース。データ本体は選んだコースが必要とする区間だけ dynamic import で読む（loadOsmFor） */
 const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水面だけの手作りデータ（建物・道路なし）。街並みは作らず、川の溝（橋の下）にだけ使う */ waterOnly?: boolean }[] = [
-  { id: 'namba', base: namba, load: async () => (await import('../data/osm/namba.json')).default as unknown as OsmData },
-  { id: 'sakai-izumiotsu', base: shiokaze, load: async () => (await import('../data/osm/sakai-izumiotsu.json')).default as unknown as OsmData },
-  { id: 'izumiotsu-kishiwada', base: kishiwada, load: async () => (await import('../data/osm/izumiotsu-kishiwada.json')).default as unknown as OsmData },
-  { id: 'kishiwada-izumisano', base: izumisano, load: async () => (await import('../data/osm/kishiwada-izumisano.json')).default as unknown as OsmData },
-  // みさき公園〜和歌山港: OSM の水面データが無いので、紀ノ川橋梁の下の水面を手で作ったデータ（建物・道路は無い。街並みは手続き生成）
-  { id: 'misaki-wakayamako', base: misakiWakayamako, load: async () => (await import('../data/osm/misaki-wakayamako.json')).default as unknown as OsmData },
   // 阪急神戸線: OSM の建物・道路・水面（npm run osm:scenery -- --course=hankyu-kobe-east / hankyu-kobe-west）。線路方向に長すぎる水面は scripts/slice-hankyu-geometry.ts が川の中心線の水面に置き換える
   { id: 'hankyu-kobe-east', base: hankyuKobeEast, load: async () => (await import('../data/osm/hankyu-kobe-east.json')).default as unknown as OsmData },
   { id: 'hankyu-kobe-west', base: hankyuKobeWest, load: async () => (await import('../data/osm/hankyu-kobe-west.json')).default as unknown as OsmData },
-  { id: 'izumisano-misaki', base: izumisanoMisaki, load: async () => (await import('../data/osm/izumisano-misaki.json')).default as unknown as OsmData },
 ];
 
 /** 走るコースとデータの共通の駅（駅名が一致するもの）。2つ未満ならそのデータは使わない。駅名だけで決まる（applyService の前後で変わらない） */

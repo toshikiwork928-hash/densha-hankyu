@@ -9,12 +9,6 @@
 // ここでも同じく、OSM の線路の中心線に沿った距離を、駅の中心どうしの間で線形に伸縮してゲームの s にする。
 // 横位置は中心線からの符号付き距離（進行方向の右が正）に、ゲーム側の本線群の中心の横位置を足す。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { namba } from '../src/route/routes/namba';
-import { shiokaze } from '../src/route/routes/shiokaze';
-import { kishiwada } from '../src/route/routes/kishiwada';
-import { izumisano } from '../src/route/routes/izumisano';
-import { izumisanoMisaki } from '../src/route/routes/izumisano-misaki';
-import { misakiWakayamako } from '../src/route/routes/misaki-wakayamako';
 import { hankyuKobeEast, hankyuKobeWest } from '../src/route/routes/hankyu-kobe';
 import { profileLat } from '../src/route/service';
 import type { Route } from '../src/route/types';
@@ -49,53 +43,6 @@ const COURSES: Record<string, Course> = {
     bbox: [34.68, 135.18, 34.76, 135.36],
     railName: '阪急電鉄神戸線',
     stations: ['西宮北口', '夙川', '芦屋川', '岡本', '御影', '六甲', '王子公園', '春日野道', '神戸三宮'],
-    mainExtras: [], twoPass: true,
-  },
-  namba: {
-    route: namba,
-    bbox: [34.566, 135.452, 34.672, 135.515],
-    railName: '南海本線',
-    stations: ['堺', '七道', '住ノ江', '住吉大社', '粉浜', '岸里玉出', '天下茶屋', '新今宮', '難波|なんば'],
-    mainExtras: ['up-local', 'down-local'],
-  },
-  // 堺〜泉大津（データの座標は 'shiokaze' = 泉大津 → 堺）
-  'sakai-izumiotsu': {
-    route: shiokaze,
-    bbox: [34.494, 135.398, 34.592, 135.482],
-    railName: '南海本線',
-    stations: ['泉大津', '松ノ浜', '北助松', '高石', '羽衣', '浜寺公園', '諏訪ノ森', '石津川', '湊', '堺'],
-    mainExtras: [],
-  },
-  // 泉大津〜岸和田（データの座標は 'kishiwada' = 泉大津 → 岸和田）
-  'izumiotsu-kishiwada': {
-    route: kishiwada,
-    bbox: [34.452, 135.362, 34.515, 135.425],
-    railName: '南海本線',
-    stations: ['泉大津', '忠岡', '春木', '和泉大宮', '岸和田'],
-    mainExtras: [],
-  },
-  // 岸和田〜泉佐野（データの座標は 'izumisano' = 岸和田 → 泉佐野）
-  'kishiwada-izumisano': {
-    route: izumisano,
-    bbox: [34.405, 135.310, 34.470, 135.385],
-    railName: '南海本線',
-    stations: ['岸和田', '蛸地蔵', '貝塚', '二色浜', '鶴原', '井原里', '泉佐野'],
-    mainExtras: [],
-  },
-  // 泉佐野〜みさき公園（データの座標は 'izumisano-misaki' = 泉佐野 → みさき公園）
-  'izumisano-misaki': {
-    route: izumisanoMisaki,
-    bbox: [34.30, 135.14, 34.43, 135.34],
-    railName: '南海本線',
-    stations: ['泉佐野', '羽倉崎', '吉見ノ里', '岡田浦', '樽井', '尾崎', '鳥取ノ荘', '箱作', '淡輪', 'みさき公園'],
-    mainExtras: [], twoPass: true, coast: true,
-  },
-  // みさき公園〜和歌山港（データの座標は 'misaki-wakayamako' = みさき公園 → 和歌山港）。和歌山港線は railName の正規表現で含める
-  'misaki-wakayamako': {
-    route: misakiWakayamako,
-    bbox: [34.19, 135.10, 34.34, 135.20],
-    railName: '南海本線|和歌山港線',
-    stations: ['みさき公園', '孝子', '和歌山大学前', '紀ノ川', '和歌山市', '和歌山港'],
     mainExtras: [], twoPass: true,
   },
 };

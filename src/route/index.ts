@@ -20,7 +20,7 @@ const HANKYU_SECTIONS: SectionEntry[] = [
   },
 ];
 export const LINES: LineEntry[] = [
-  { id: 'hankyu-kobe', name: '阪急神戸線', desc: '阪急神戸線（大阪梅田〜神戸三宮）。区間を選ぶ。普通（2000系 8両）', theme: 'coast', dirs: HANKYU_SECTIONS.flatMap(x => x.dirs), sections: HANKYU_SECTIONS },
+  { id: 'hankyu-kobe', name: '阪急神戸線', desc: '阪急神戸線（大阪梅田〜神戸三宮）。区間を選ぶ。普通・特急・通勤特急・快速・準特急（2000系 8両）', theme: 'coast', dirs: HANKYU_SECTIONS.flatMap(x => x.dirs), sections: HANKYU_SECTIONS },
 ];
 /** route id → 区間（区間の無い線区は undefined） */
 export const sectionOf = (routeId: string): SectionEntry | undefined => lineOf(routeId)?.sections?.find(x => x.dirs.some(d => d.id === routeId));

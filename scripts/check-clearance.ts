@@ -1,18 +1,10 @@
 // 構造物の建築限界チェック（描画なし）。esbuild で Node 向けに束ねて実行する。
-// 南海本線（下り・上り × 普通/急行/特急）と高野線（下り・上り）のワールドを列車なしで組み立て、
+// 阪急神戸線の4コースのワールドを列車なしで組み立て、
 // src/debug/clearance.ts で全メッシュを走行線の建築限界に対して標本判定する。読込素材（ビル・木）は簡易モデルで代替。
 //   npm run verify:clearance            違反があれば終了コード 1
 //   npm run verify:clearance -- --all   全違反群を表示
 //   npm run verify:clearance -- --route=shiokaze --service=local   1ケースだけ点検
 import * as THREE from 'three';
-import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
-import { mountain, mountainUp } from '../src/route/routes/mountain';
-import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
-import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
-import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisano-misaki';
-import { through, throughUp } from '../src/route/routes/through';
-import { namba, nambaUp } from '../src/route/routes/namba';
-import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
 import { buildTrack } from '../src/route/track';
 import { hankyuKobeEast, hankyuKobeEastUp, hankyuKobeWest, hankyuKobeWestUp } from '../src/route/routes/hankyu-kobe';
 import { applyService } from '../src/route/service';
@@ -78,25 +70,6 @@ async function build(ctx: GameContext): Promise<void> {
   const town = buildTown(ctx);
   buildSignals(ctx);
   buildCrossings(ctx, fakeOncoming);
-  // 堺〜難波の専用景観（電車を除く）
-  // 車両モデルのモジュールは読込時に canvas を使うので、DOM スタブの後に動的に読む
-  const nctx = (await import('../src/world/namba-frame')).nambaFrame(ctx);
-  if (nctx) {
-    (await import('../src/world/namba-terminal')).buildNambaTerminal(nctx);
-    (await import('../src/world/suminoe-depot')).buildSuminoeDepot(nctx);
-    (await import('../src/world/namba-landmarks')).buildNambaLandmarks(nctx);
-    (await import('../src/world/koya-traffic')).buildKoyaPlatforms(nctx);
-  }
-  // みさき公園〜和歌山港の和歌山市駅（電車を除く）
-  (await import('../src/world/wakayamashi')).buildWakayamashi(ctx);
-  // みさき公園〜和歌山港の和歌山大学前駅の周辺（橋上駅舎・駅ビル・デッキ・イオンモール・西口・マンション・斜面）
-  (await import('../src/world/wakayamadaigakumae')).buildWakayamadaigakumae(ctx);
-  // 泉佐野〜みさき公園の専用景観（空港線の高架・JR の橋・羽倉崎検車区。電車を除く）
-  const sctx = (await import('../src/world/down-frame')).downFrame(ctx, 'izumisano-misaki');
-  if (sctx) {
-    (await import('../src/world/izumisano-airport')).buildIzumisanoAirport(sctx);
-    (await import('../src/world/hagurazaki-depot')).buildHagurazakiDepot(sctx);
-  }
   releaseOsmData();
   placeScenery(ctx, prepareSceneryModels({} as any), town.trees);
 }
@@ -104,9 +77,8 @@ async function build(ctx: GameContext): Promise<void> {
 const all = process.argv.includes('--all');
 const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const routeFilter = option('route'), serviceFilter = option('service');
-// 阪急版: 阪急神戸線の4コース（種別はどれも本線を走るので普通で点検。待避は無い）。南海のコースは登録していないので点検しない
+// 阪急神戸線の4コース（種別はどれも本線を走るので普通で点検。待避は無い）
 const cases: [Route, ServiceId[]][] = [[hankyuKobeEast, ['local']], [hankyuKobeEastUp, ['local']], [hankyuKobeWest, ['local']], [hankyuKobeWestUp, ['local']]];
-void [shiokaze, shiokazeUp, mountain, mountainUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, izumisanoMisaki, izumisanoMisakiUp, through, throughUp, namba, nambaUp, misakiWakayamako, misakiWakayamakoUp];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {
